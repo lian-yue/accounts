@@ -1,0 +1,16 @@
+{
+  "apps": [{
+    "name": "lianyue-accounts",
+    "script": "bin/www",
+    "exec_mode": "cluster",
+    "instances": 0,
+    "max_memory_restart": "1G",
+    "autorestart": true,
+    "node_args": [],
+    "args": [],
+    "env": {
+      "NODE_ENV": "production",
+      "HOST": "127.0.0.1"
+    }
+  }]
+}
