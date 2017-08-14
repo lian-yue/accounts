@@ -2,9 +2,6 @@ import {Schema, Types} from 'mongoose'
 
 import model from './model'
 
-
-import Token from './token'
-
 import Role from './role'
 
 // 授权信息
@@ -59,11 +56,6 @@ const schema = new Schema({
     }
   ],
 
-  state: {
-    type: Object,
-    default: Object,
-  },
-
   createdAt: {
     type: Date,
     index: true,
@@ -83,15 +75,6 @@ const schema = new Schema({
 })
 
 schema.index({user:1, application: 1}, {unique: true})
-
-/*schema.pre('save', function(next) {
-  if (this.get('deletedAt') && this.isModified('deletedAt')) {
-    new Promise(function(resolve, reject) {
-      Token.find()
-    })
-  }
-  next()
-})*/
 
 
 schema.statics.findOneCreate = async function(user, application) {
@@ -115,4 +98,24 @@ schema.statics.findOneCreate = async function(user, application) {
   return authorize
 }
 
-export default model('Authorize', schema)
+
+
+
+
+
+
+
+/**
+ * 删除  删除相关的 token
+ * @type {[type]}
+ */
+schema.pre('save', async function() {
+  if (this.isNew || !this.isModified('deletedAt') || !this.get('deletedAt')) {
+    return
+  }
+  this.savePost(async () => {
+    await require('./token').default.updateMany({user: this, application: this.get('application'), createdAt: {$lt: this.get('deletedAt')}, deletedAt: {$exists: false}}, {$set: {deletedAt: new Date}}, {w:0}).exec()
+  })
+})
+
+export default model('Authorize', schema, {strict: false})

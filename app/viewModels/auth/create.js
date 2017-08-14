@@ -1,8 +1,9 @@
-import Log from 'models/log'
 import User from 'models/user'
 import Auth from 'models/auth'
+import Message from 'models/message'
 import Authorize from 'models/authorize'
 import Verification from 'models/verification'
+import oauthConfig from 'config/oauth'
 
 export default async function(ctx) {
   var validate
@@ -11,6 +12,7 @@ export default async function(ctx) {
     ...ctx.request.body,
   }
 
+  var column = String(params.column || '').toLowerCase().trim()
   var username = String(params.username || '').trim()
   var nickname = String(params.nickname || '').trim() || username
   var password = String(params.password || '')
@@ -44,8 +46,10 @@ export default async function(ctx) {
     registerIp: ctx.ip,
   });
 
-  var authEmail;
-  var authPhone;
+  var auths = []
+  var authOauth
+  var authEmail
+  var authPhone
 
 
   if (validate = user.validateSync()) {
@@ -58,6 +62,7 @@ export default async function(ctx) {
       value: email,
       user,
     });
+    auths.push(authEmail)
   }
 
   if (createType == 'phone' || phone) {
@@ -66,19 +71,56 @@ export default async function(ctx) {
       value: phone,
       user,
     });
+    auths.push(authPhone)
+  }
+
+  if (createType == 'column' || column) {
+    if (!oauthConfig[column]) {
+      ctx.throw('认证字段不正确', 403)
+    }
+    let state = token.get('state.auth.' + column)
+    let userInfo = state.userInfo
+    if (!userInfo || !userInfo.id || (Date.now() - 1800 * 10000) > state.createdAt.getTime()) {
+      ctx.throw('未登录认证帐号', 403, {column: true})
+    }
+
+    authOauth =  new Auth({
+      column,
+      value: userInfo.id,
+      user,
+      token: state.accessToken,
+      state: state.userInfo,
+    })
+
+    token.set('state.auth.' + column, void 0)
+    auths.push(authOauth)
+
+
+    // 没 email  自动添加
+    if (!authEmail && userInfo.email && !(await Auth.findOne({column: 'email', value: userInfo.email}).exec())) {
+      auths.push(new Auth({
+        column: 'email',
+        value: userInfo.email,
+        user,
+      }))
+    }
+
+    // 取消密码设置
+    if (!params.password && params.password == void 0) {
+      user.set('password', void 0)
+      user.set('passwordAgain', void 0)
+    }
   }
 
 
-  if (!authEmail && !authPhone) {
-    ctx.throw('邮箱和手机必须选填一个', 403)
+  if (!auths.length) {
+    ctx.throw('必须选择一个验证方式', 403)
   }
 
-  if (authEmail && (validate = authEmail.validateSync())) {
-    throw validate;
-  }
-
-  if (authPhone && (validate = authPhone.validateSync())) {
-    throw validate;
+  for (let i = 0; i < auths.length; i++) {
+    if (validate = auths[i].validateSync()) {
+      throw validate
+    }
   }
 
   if (authEmail && !emailCode) {
@@ -93,15 +135,11 @@ export default async function(ctx) {
     throw e;
   }
 
-
-  if (authEmail && (validate = await authEmail.validate())) {
-    throw validate;
+  for (let i = 0; i < auths.length; i++) {
+    if (validate = await auths[i].validate()) {
+      throw validate;
+    }
   }
-
-  if (authPhone && (validate = await authPhone.validate())) {
-    throw validate;
-  }
-
 
   if (authEmail && ctx.app.env != 'development') {
     let verification  = await Verification.findByCode({
@@ -138,37 +176,43 @@ export default async function(ctx) {
     }
   }
 
-
   await user.populate(User.metaPopulate(true)).execPopulate()
 
-  if (authEmail) {
-    await authEmail.save();
+  try {
+    for (let i = 0; i < auths.length; i++) {
+      await auths[i].save()
+    }
+  } catch (e) {
+    ctx.app.emit('error', e, ctx)
   }
-
-  if (authPhone) {
-    await authPhone.save();
-  }
-
 
   var authorize
   if (application) {
     authorize = await Authorize.findOneCreate(user, application)
   }
+
   token.set('user', user)
   token.set('authorize', authorize)
   await token.save()
 
-  var log = new Log({
-    user,
-    token,
-    application,
-    userAgent: ctx.request.header['user-agent'] || '',
-    path: 'auth/login',
-    ip: ctx.ip,
-    create: true,
-  })
-  await log.save()
 
-  ctx.status = 201
-  ctx.vmState(token)
+  var message = new Message({
+    user,
+    readOnly: true,
+    type: 'user_save',
+    column: column || void 0,
+    token,
+  })
+  await message.save()
+
+  var message = new Message({
+    user,
+    readOnly: true,
+    type: 'auth_login',
+    column: column || void 0,
+    token,
+  })
+  await message.save()
+
+  ctx.vmState(token, 201)
 }

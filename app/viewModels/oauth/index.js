@@ -15,22 +15,17 @@ import authorize from './authorize'
 const applicationSecret = applicationMiddleware({
 })
 
-const applicationId = applicationMiddleware({
-  secret: false,
-})
-
-const introspectApplicationId = applicationMiddleware({
-  secret: false,
-  required: false,
-})
-
 
 const introspectToken = tokenMiddleware({
   name: 'token',
   types: ['refresh', 'access'],
   user: true,
+  log: false,
   authorize: true,
-  application: true,
+  application: {
+    secret: false,
+    required: false,
+  },
 })
 
 
@@ -39,25 +34,22 @@ const revokeToken = tokenMiddleware({
   types: ['refresh', 'access'],
   user: true,
   authorize: true,
-  application: true,
+  application: {},
   log: true,
 })
 
 
 
-const authorizeApplicationId = applicationMiddleware({
-  secret: false,
-  cors: false,
-})
-
 const authorizeToken = tokenMiddleware({
   types: ['access'],
   user: true,
   authorize: false,
-  application: false,
+  application: {
+    secret: false,
+    cors: false,
+  },
   strict: false,
   cors: false,
-  log: false,
 })
 
 
@@ -82,14 +74,14 @@ const router = new Router
 
 router.use(body)
 
-router.get('/introspect', introspectApplicationId, introspectToken, introspect)
-router.post('/introspect', introspectApplicationId, introspectToken, introspect)
+router.get('/introspect', introspectToken, introspect)
+router.post('/introspect', introspectToken, introspect)
 
 
 router.post('/token', applicationSecret, token)
-router.post('/revoke', applicationSecret, revokeToken, revoke)
+router.post('/revoke', revokeToken, revoke)
 
-router.post('/authorize', authorizeApplicationId, authorizeToken, rateLimitAuthorize, authorize)
+router.post('/authorize', authorizeToken, rateLimitAuthorize, authorize)
 
-router.opt(['/introspect', '/token', '/revoke'], applicationId)
+router.opt(['/introspect', '/token', '/revoke'], applicationSecret)
 export default router

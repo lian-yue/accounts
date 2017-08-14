@@ -9,10 +9,9 @@ import model from './model'
 
 import * as validator from './validator'
 
-import Log from './log'
 import Auth from './auth'
 import Meta from './meta'
-import Notification from './notification'
+import Message from './message'
 
 const schema = new Schema({
   username: {
@@ -30,6 +29,12 @@ const schema = new Schema({
           return !validator.mobilePhone(username);
         },
         message: '用户名不能为电话号 ({PATH})',
+      },
+      {
+        validator(username) {
+          return !/^[-]|[-]$/.test(username)
+        },
+        message: '用户名不能已 - 开头或结尾 ({PATH})',
       },
       {
         validator(username) {
@@ -196,22 +201,41 @@ const schema = new Schema({
   // 理由
   reason: {
     type: String,
+    trim: true,
+    maxlength: [255, '理由不能大于 255 字节 ({PATH})'],
+    validate: [
+      {
+        validator(reason) {
+          if (this.isModified('black')) {
+            return reason
+          }
+          return true
+        },
+        message: '理由不能为空 ({PATH})',
+      },
+    ]
   },
 
-  attributes: [
+  // 管理员
+  admin: {
+    index: true,
+    type: Boolean,
+    default: false,
+  },
+
+  // 黑名单
+  black: {
+    index: true,
+    type: Boolean,
+    default: false,
+  },
+
+  auths: [
     {
       type: String,
       index: true,
-      required: [true, '属性名不能为空'],
-      maxlength: [32, '属性名长度不能大于 32 字节 ({PATH})'],
-      validate: [
-        {
-          validator(attribute) {
-            return this.get('attributes').length <= 8
-          },
-          message: '属性数量不能大于 8 个 ({PATH})',
-        },
-      ]
+      required: [true, '认证名不能为空'],
+      maxlength: [32, '认证名长度不能大于 32 字节 ({PATH})'],
     }
   ],
 
@@ -264,8 +288,6 @@ schema.virtual('url').get(function() {
   return '/' + encodeURIComponent(this.get('username'));
 });
 
-
-
 schema.virtual('oldPassword').set(function(value) {
   this.$_oldPassword = value;
 });
@@ -284,14 +306,18 @@ schema.virtual('newPasswordAgain').set(function(value) {
 
 
 schema.set('toJSON', {
-  virtuals: true,
   transform(doc, ret) {
-    delete ret.registerIp
-    delete ret.password
-    delete ret.oldPassword
-    delete ret.passwordAgain
-    delete ret.newPassword
-    delete ret.newPasswordAgain
+    var tokenUser = doc.getToken() ? doc.getToken().get('user') : void 0
+    if (!tokenUser || tokenUser.get('black') || !tokenUser.get('admin')) {
+      delete ret.registerIp
+    }
+    if (tokenUser && tokenUser.equals(this)) {
+      ret.password = ret.password ? true : false
+    } else {
+      delete ret.password
+    }
+
+    ret.url = doc.get('url')
   }
 });
 
@@ -306,8 +332,8 @@ schema.set('toJSON', {
  */
 schema.methods.comparePassword = function(password) {
   return new Promise((resolve, reject) => {
-    var hash = this.$_setPassword === void 0 ? this.$_setPassword : this.get('password')
-    if (!!password || hash) {
+    var hash = this.$_setPassword === void 0 ? this.get('password') : this.$_setPassword
+    if (!password || !hash) {
       return resolve(false);
     }
     bcrypt.compare(password, hash, (err, res) => {
@@ -321,10 +347,6 @@ schema.methods.comparePassword = function(password) {
 
 
 
-schema.methods.canAttribute = function(name) {
-  return this.get('attributes').indexOf(name) != -1
-}
-
 
 schema.methods.can = async function(method) {
   var token = this.getToken()
@@ -334,7 +356,7 @@ schema.methods.can = async function(method) {
       if (tokenUser) {
         return false
       }
-      if ((!token || token.get('application')) && this.canAttribute('black')) {
+      if ((!token || token.get('application')) && this.get('black')) {
         return false
       }
       return true
@@ -343,16 +365,16 @@ schema.methods.can = async function(method) {
       if (!tokenUser || token.get('application') || !tokenUser.equals(this)) {
         return false
       }
-      if (this.canAttribute('black')) {
+      if (this.get('black')) {
         return false
       }
       return true
       break
     case 'list':
-      if (!tokenUser || !tokenUser.canAttribute('admin')) {
+      if (!tokenUser || !tokenUser.get('admin')) {
         return false
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       return await token.can('user/list')
@@ -364,7 +386,7 @@ schema.methods.can = async function(method) {
       if (tokenUser.equals(this)) {
         return true
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       return await token.can('user/read')
@@ -373,57 +395,57 @@ schema.methods.can = async function(method) {
       if (!tokenUser) {
         return false
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       if (!await token.can('user/save')) {
         return false
       }
-      return tokenUser.equals(this) || tokenUser.canAttribute('admin')
+      return tokenUser.equals(this) || tokenUser.get('admin')
       break
     case 'username':
       if (!tokenUser) {
         return false
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       if (!this.isNew && !await token.can('user/username')) {
         return false
       }
-      return this.isNew || tokenUser.canAttribute('admin')
+      return this.isNew || tokenUser.get('admin')
       break
     case 'password':
       if (!tokenUser) {
         return false
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       if (!this.isNew && !await token.can('user/password')) {
         return false
       }
-      return this.isNew || tokenUser.equals(this) || tokenUser.canAttribute('admin')
+      return this.isNew || tokenUser.equals(this) || tokenUser.get('admin')
       break
     case 'black':
-      if (!tokenUser || !tokenUser.canAttribute('admin')) {
+      if (!tokenUser || !tokenUser.get('admin')) {
         return false
       }
-      if (tokenUser.canAttribute('black')) {
+      if (tokenUser.get('black')) {
         return false
       }
       if (tokenUser.equals(this)) {
         return false
       }
-      return !this.canAttribute('black') && await token.can('user/black')
+      return !this.get('black') && await token.can('user/black')
     case 'restore':
-      if (!tokenUser || !tokenUser.canAttribute('admin')) {
+      if (!tokenUser || !tokenUser.get('admin')) {
         return false
       }
       if (tokenUser.equals(this)) {
         return false
       }
-      return this.canAttribute('black') && await token.can('user/restore')
+      return this.get('black') && await token.can('user/restore')
       break
     default:
       return false
@@ -433,10 +455,9 @@ schema.methods.can = async function(method) {
 
 
 
-schema.statics.Log = Log
 schema.statics.Auth = Auth
 schema.statics.Meta = Meta
-schema.statics.Notification = Notification
+schema.statics.Message = Message
 
 /**
  * 简单的  Populate
@@ -476,7 +497,7 @@ schema.statics.metaPopulate = function(all) {
   return {
     path: 'meta',
     select: {
-      notification: 0,
+      message: 0,
     },
   }
 }
@@ -489,34 +510,49 @@ schema.statics.metaPopulate = function(all) {
  * @param  string account
  * @return boolean | User
  */
-schema.statics.findByUsername = async function(account, auth) {
-  account = String(account).trim()
-  if (!account) {
+schema.statics.findByAuth = async function(value, column) {
+  value = String(value).toLowerCase().trim()
+  if (!value) {
     return null
   }
-  if (/^[0-9a-z]{24}$/.test(account)) {
-    return await this.findById(id).exec()
+
+  if (!column || Array.isArray(column)) {
+    if (!column) {
+      column = ['id', 'email', 'phone', 'username']
+    }
+    let value2
+    if (/^[0-9a-z]{24}$/.test(value) && column.indexOf('id') != -1) {
+      column = 'id'
+    } else if ((value2 = validator.email(value)) && column.indexOf('email') != -1) {
+      column = 'email'
+      value = value2
+    } else if ((value2 = validator.mobilePhone(value)) && column.indexOf('phone') != -1) {
+      column = 'phone'
+      value = value2
+    } else if (column.indexOf('username') != -1) {
+      column = 'username'
+    } else {
+      column = ''
+    }
+    if (!column) {
+      return null
+    }
   }
 
-  if (!auth) {
-    return await this.findOne({username: account}).exec()
+  if (column == 'id') {
+    return await this.findById(value).exec()
   }
 
-  account = account.toLowerCase()
-
-  var column
-  var value
-
-  if (value = validator.email(account)) {
-    column = 'email'
-  } else if (value = validator.mobilePhone(account)) {
-    column = 'phone'
-  } else {
-    column = 'username'
-    value = account
+  var query = {
+    value,
+    column,
   }
 
-  var auth = await Auth.findOne({value, column, deletedAt: {$exists:false}}).populate('user').exec();
+  if (column != 'username') {
+    query.deletedAt = {$exists: false}
+  }
+
+  var auth = await Auth.findOne(query).populate('user').exec();
   return auth ? auth.get('user') : null
 }
 
@@ -563,6 +599,17 @@ schema.pre('save', function(next) {
 
 
 
+/**
+ * 自动添加更新时间
+ * @return {[type]} [description]
+ */
+schema.pre('save', async function() {
+  if (!this.isNew) {
+    this.set('updatedAt', new Date)
+  }
+})
+
+
 
 /**
  * 修改用户名
@@ -602,34 +649,35 @@ schema.pre('save', async function() {
 
 
 
-/**
- * 自动添加更新时间
- * @return {[type]} [description]
- */
-schema.pre('save', async function() {
-  if (!this.isNew) {
-    this.set('updatedAt', new Date)
-  }
-})
-
-
-
-
 
 /**
- * 创建用户 消息
- * @return {[type]} [description]
+ * 修改密码
+ * @type {[type]}
  */
 schema.pre('save', async function() {
-  if (!this.isNew) {
+  if (!this.isModified('password') || this.isNew) {
     return
   }
-  var notification = new Notification({
-    message: '欢迎注册',
-  })
-  this.savePost(notification)
-})
+  this.savePost(async () => {
+    var date = this.get('updatedAt')
+    var token = this.getToken()
+    var query = {
+      user: this,
+      deletedAt: {$exists: false},
+      createdAt: {$lt: date},
+    }
+    if (token) {
+      query._id = {$ne: token.get('_id')}
+    }
+    await require('./token').default.updateMany(query, {$set: {deletedAt: date}}, {w:0}).exec()
 
+    // token 等于自己删除
+    if (token && this.equals(token.get('user'))) {
+      token.set('deletedAt', date)
+      await token.save()
+    }
+  })
+})
 
 
 /**
@@ -661,9 +709,7 @@ schema.on('init', async function(User) {
     username: 'admin',
     nickname: 'admin',
     password: '123456',
-    attributes: [
-      'admin',
-    ]
+    admin: true,
   })
 
   await user.save();

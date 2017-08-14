@@ -1,6 +1,7 @@
 import User from 'models/user'
 import Token from 'models/token'
-import cors from './cors'
+import corsMiddleware from './cors'
+import applicationMiddleware from './application'
 
 
 function getTokenKey(ctx, name) {
@@ -28,6 +29,7 @@ export default function(opt) {
     strict: true,
     black: true,
     cors: true,
+    auths: [],
     ...opt,
   }
 
@@ -39,10 +41,17 @@ export default function(opt) {
     opt.name = opt.types[0] + '_token'
   }
 
+  if (opt.application) {
+    opt.application = applicationMiddleware(opt.application)
+  }
+
   return async function(ctx, next) {
     var token = ctx.state.token
-    var application = ctx.state.application
     delete ctx.state.token
+    if (opt.application) {
+      await opt.application(ctx, async function() {})
+    }
+    var application = ctx.state.application
     var key = getTokenKey(ctx, opt.name)
     var csrf
     if (key) {
@@ -87,11 +96,18 @@ export default function(opt) {
 
 
     // 不存在
-    if (!token || token.get('key') !== key.substr(24)) {
+    if (!token || token.get('secret') !== key.substr(24)) {
       ctx.throw(`"${opt.name}" does not exist`, 401, {code: 'invalid_client'})
     }
 
     var user = token.get('user')
+    if (user) {
+      user.setToken(token)
+    }
+
+    if (token.get('authorize')) {
+      token.get('authorize').setToken(token)
+    }
 
     // 令牌类型
     if (opt.types.indexOf(token.get('type')) == -1) {
@@ -99,12 +115,7 @@ export default function(opt) {
     }
 
     // 令牌 和 application 不匹配
-    if (application && opt.application !== false && (!token.get('application') || !token.get('application').equals(application))) {
-      ctx.throw(`"${opt.name}" does not match`, 403, {code: 'invalid_client'})
-    }
-
-    // 是否带有 application 字段
-    if (typeof opt.application != 'undefined' && Boolean(token.get('application')) != Boolean(opt.application)) {
+    if (application && opt.authorize !== false && (!token.get('application') || !token.get('application').equals(application))) {
       ctx.throw(`"${opt.name}" does not match`, 403, {code: 'invalid_client'})
     }
 
@@ -125,13 +136,34 @@ export default function(opt) {
     }
 
     // cors
-    if (opt.cors && token.get('application') && !(await cors(ctx, token.get('application'))) && next) {
+    if (opt.cors && token.get('application') && !(await corsMiddleware(ctx, token.get('application'))) && next) {
       return
     }
 
-    // 过期
-    if (!await token.compareKey(key)) {
+    // 被删除 or 已过期
+    if (token.get('deletedAt') || token.get('expiredAt').getTime() < Date.now()) {
       ctx.throw(`"${opt.name}" has expired`, 401, {code: 'invalid_grant', expired: true})
+    }
+
+    // application 无效
+    if (token.get('application') && (token.get('application').get('status') == 'block' || token.get('application').get('deletedAt'))) {
+      ctx.throw(`Invalid application`, 401, {code: 'invalid_grant', application: true})
+    }
+
+    // 认证被删除
+    if (token.get('authorize') && token.get('authorize').get('deletedAt')) {
+      ctx.throw(`"${opt.name}" has expired`, 401, {code: 'invalid_grant', expired: true, authorize: true})
+    }
+
+
+    // auths
+    var applicationAuths = application || token.get('application')
+    if (applicationAuths) {
+      for (let i = 0; i < opt.auths.length; i++) {
+        if (!applicationAuths.get('auths').get(opt.auths[i])) {
+          ctx.throw('The authorization mode is not allowed', 400, {code: 'unsupported_response_type'})
+        }
+      }
     }
 
     // 是否要登陆
@@ -146,23 +178,23 @@ export default function(opt) {
     }
 
     // 黑名单
-    if (opt.black && token.get('application') && user && user.canAttribute('black')) {
+    if (opt.black && token.get('application') && user && user.get('black')) {
       ctx.throw(`Your account is blocked because of "${user.get('reason')}"`, 403, {code: 'invalid_grant', black: true})
     }
 
     // 日志
-    if (typeof opt.log != 'undefined') {
+    if (opt.log !== false) {
       token.updateLog(ctx, opt.log)
     }
 
     // 过期时间
     var date = new Date
-    if ((token.get('expiredAt').getTime() - 86400 * 1000 * 20) < date.getTime() && (token.get('createdAt').getTime() + 86400 * 1000 * 7) < date.getTime()) {
+    if (token.get('renewal') && (token.get('expiredAt').getTime() - 86400 * 1000 * 20) < date.getTime()) {
       date.setTime(date.getTime() + 1000 * 86400 * 30)
       token.set('expiredAt', date)
     }
+
     if (token.isModified()) {
-      token.set('updatedAt', new Date)
       await token.save()
     }
 

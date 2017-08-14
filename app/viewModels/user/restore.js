@@ -1,4 +1,4 @@
-import Notification from 'models/notification'
+import Message from 'models/message'
 export default async function (ctx) {
   var user = ctx.state.user
   var token = ctx.state.token
@@ -12,26 +12,20 @@ export default async function (ctx) {
 
   await user.setToken(token).canThrow('restore')
 
-  var attributes = user.get('attributes')
-  var index = attributes.indexOf('black')
-  if (index != -1) {
-    attributes.splice(index, 1)
-    user.set('attributes', attributes)
-  }
+  user.set('black', false)
+  user.set('reason', String(ctx.query.reason || ''))
+  await user.save()
 
-  if (user.isModified()) {
-    user.set('reason', ctx.query.reason)
-    await user.save()
-  }
 
-  // 通知
-  var notification = new Notification({
+  var message = new Message({
     user,
+    type: 'user_restore',
     creator: tokenUser,
-    reason: String(params.reason),
-    message: '您的账号被管理员"{CREATOR}"恢复正常使用。 理由：{REASON}',
+    reason: user.get('reason'),
+    token,
   })
-  await notification.save()
+  await message.save()
 
-  await ctx.render({})
+
+  ctx.vmState({})
 }

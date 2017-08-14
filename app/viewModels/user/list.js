@@ -35,12 +35,12 @@ export default async function (ctx) {
     query.username = String(params.username).trim()
   }
   var results = User.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).populate(User.metaPopulate())
-  if (tokenUser.canAttribute('admin')) {
+  if (tokenUser.get('admin')) {
     results = results.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({path: 'application', select: {name: 1, slug: 1, content: 1}})
   }
   results = await results.exec()
 
-  var more = results.length > query.limit
+  var more = results.length > options.limit
   if (more) {
     results.pop()
   }

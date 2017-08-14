@@ -1,3 +1,4 @@
+import Message from 'models/message'
 export default async function (ctx) {
   var user = ctx.state.user
   var token = ctx.state.token
@@ -10,26 +11,26 @@ export default async function (ctx) {
     Object.assign(params, ctx.request.body)
   }
 
-  var admin = ctx.method != 'delete' && params.admin
-
   await user.setToken(token).canThrow('admin')
 
-  var attributes = user.get('attributes')
-  var index = attributes.indexOf('admin')
-  if (admin) {
-    if (index == -1) {
-      attributes.puah('admin')
-      user.set('attributes', attributes)
-    }
-  } else if (index != -1) {
-    attributes.splice(index, 1)
-    user.set('attributes', attributes)
+  user.set('admin', ctx.method != 'delete' && params.admin)
+  if (!user.isModified()) {
+    ctx.vmState({})
+    return
   }
 
-  if (user.isModified()) {
-    user.set('reason', params.reason)
-    await user.save()
-  }
+  user.set('reason', String(params.reason))
+  await user.save()
 
-  await ctx.render({})
+  var message = new Message({
+    user,
+    type: 'user_admin',
+    creator: tokenUser,
+    admin: user.get('admin'),
+    reason: user.get('reason'),
+    token,
+  })
+  await message.save()
+
+  ctx.vmState({})
 }

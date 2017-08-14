@@ -7,7 +7,7 @@ export default async function (ctx) {
   var me = tokenUser && tokenUser.equals(user)
 
   user.populate(User.metaPopulate(me))
-  if (tokenUser.canAttribute('admin')) {
+  if (tokenUser.get('admin')) {
     user.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({path: 'application', select: {name: 1, slug: 1, content: 1}})
   }
   await  user.execPopulate()

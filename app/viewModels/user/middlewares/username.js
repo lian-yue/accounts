@@ -14,7 +14,7 @@ export default async function (ctx, next) {
       }
       ctx.state.user = ctx.state.token.get('user')
     } else {
-      ctx.state.user = await User.findByUsername(ctx.params.username)
+      ctx.state.user = await User.findByAuth(ctx.params.username, ['username', 'id'])
     }
     if (!ctx.state.user) {
       ctx.throw('用户不存在', 404)

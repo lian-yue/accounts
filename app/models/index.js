@@ -6,7 +6,7 @@ import Authorize from './authorize'
 import Token from './token'
 import Role from './role'
 import Verification from './verification'
-import Notification from './notification'
+import Message from './message'
 
 
 
@@ -20,7 +20,7 @@ export {
   Role,
   Token,
   Verification,
-  Notification,
+  Message,
 }
 
 if (module.hot) {

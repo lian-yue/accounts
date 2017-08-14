@@ -7,6 +7,7 @@ export default function(opt) {
     secret: true,
     required: true,
     cors: true,
+    auths: [],
     ...opt,
   }
 
@@ -124,6 +125,13 @@ export default function(opt) {
     // 令牌 和 application 不匹配
     if (token && (!token.get('application') || !token.get('application').equals(application))) {
       ctx.throw('"token" does not match', 403, {code: 'invalid_client'})
+    }
+
+    // auths
+    for (let i = 0; i < opt.auths.length; i++) {
+      if (!application.get('auths').get(opt.auths[i])) {
+        ctx.throw('The authorization mode is not allowed', 400, {code: 'unsupported_response_type'})
+      }
     }
 
     // ip 白名单

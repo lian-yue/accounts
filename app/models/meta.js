@@ -2,7 +2,7 @@ import model from './model'
 import { Schema } from 'mongoose'
 
 const schema = new Schema({
-  notification: {
+  message: {
     type: Schema.Types.Integer,
     default: 0,
   },

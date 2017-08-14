@@ -5,6 +5,7 @@ import tokenMiddleware from 'viewModels/middlewares/token'
 const accessToken = tokenMiddleware({
   types: ['access'],
   cookie: true,
+  auths: ['cors'],
 })
 
 export default async function (ctx, next) {
@@ -15,6 +16,7 @@ export default async function (ctx, next) {
     ctx.state.rateLimit = false
   } catch (e) {
   }
+
 
   if (!token) {
     var scopes = ['**']
@@ -40,6 +42,7 @@ export default async function (ctx, next) {
     expiredAt.setTime(expiredAt.getTime() + 1000 * 86400 * 30)
 
     token = new Token({
+      renewal: true,
       expiredAt,
       scopes,
       application,
@@ -47,17 +50,17 @@ export default async function (ctx, next) {
   }
 
 
-  token.updateLog(ctx)
+  token.updateLog(ctx, false)
   var isNew = token.isNew
   if (isNew || token.isModified()) {
     await token.save()
     if (!application) {
-      ctx.cookies.set('access_token', token.get('id') + token.get('key'),  {...cookieConfig, expires: token.get('expiredAt'), path:'/', httponly: true});
+      ctx.cookies.set('access_token', token.get('id') + token.get('secret'),  {...cookieConfig, expires: token.get('expiredAt'), path:'/', httponly: true});
     }
   }
 
   ctx.vmState({
     ...token.toJSON(),
-    access_token: isNew && application ? token.get('id') + token.get('key') : undefined,
+    access_token: isNew && application ? token.get('id') + token.get('secret') : undefined,
   })
 }

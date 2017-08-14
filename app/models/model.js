@@ -53,7 +53,7 @@ Schema.Types.Integer = Integer;
   Schema.prototype.post = function(name, isAsync, fn) {
     if (arguments.length == 2 && isAsync.length == 0) {
       fn = function(doc, next) {
-        var result = isAsync.apply(this, []);
+        var result = isAsync.apply(this, [])
         if (result && result.then) {
           result.then(() => {
             next();

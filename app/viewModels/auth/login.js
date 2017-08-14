@@ -1,6 +1,8 @@
-import Log from 'models/log'
 import User from 'models/user'
+import Auth from 'models/auth'
+import Message from 'models/message'
 import Authorize from 'models/authorize'
+import oauthConfig from 'config/oauth'
 
 export default async function (ctx) {
   var params = {
@@ -9,36 +11,64 @@ export default async function (ctx) {
   }
   var token = ctx.state.token
   var application = token.get('application')
-  var username = String(params.username || '').toLowerCase().trim()
-  var password = String(params.password || '');
+  var user
 
 
-  if (!username) {
-    ctx.throw('Username can not be empty', 403)
-  }
+  var column = String(params.column || '').toLowerCase().trim()
+  if (column) {
+    if (!oauthConfig[column]) {
+      ctx.throw('认证字段不正确', 403)
+    }
+    let state = token.get('state.auth.' + column) || {}
+    let userInfo = state.userInfo
+    if (!userInfo || !userInfo.id || (Date.now() - 300 * 10000) > state.createdAt.getTime()) {
+      ctx.throw('未登录认证帐号', 403, {column: true})
+    }
+    user = await User.findByAuth(userInfo.id, column)
 
-  if (!password) {
-    ctx.throw('Password can not be empty', 403)
-  }
+    if (!user) {
+      ctx.throw('Username does not exist', 404)
+    }
 
-  var user = await User.findByUsername(username, true)
+    let auth = await Auth.findOne({user, column, value: userInfo.id, deletedAt: {$exists: false}}).exec()
+    if (auth) {
+      auth.set('token', state.accessToken)
+      auth.set('state', state.userInfo)
+      token.savePost(auth)
+    }
 
-  if (!user) {
-    ctx.throw('Username does not exist', 404)
-  }
 
-  if (!await user.comparePassword(password)) {
-    var log = new Log({
-      user,
-      token,
-      application,
-      userAgent: ctx.request.header['user-agent'] || '',
-      type: 'error',
-      path: 'auth/login',
-      ip: ctx.ip,
-    })
-    await log.save()
-    ctx.throw('Incorrect password', 403)
+    token.set('state.auth.' + column, void 0)
+  } else {
+    var username = String(params.username || '').toLowerCase().trim()
+    var password = String(params.password || '');
+
+
+    if (!username) {
+      ctx.throw('Username can not be empty', 403)
+    }
+
+    if (!password) {
+      ctx.throw('Password can not be empty', 403)
+    }
+
+    user = await User.findByAuth(username)
+
+    if (!user) {
+      ctx.throw('Username does not exist', 404)
+    }
+    if (!await user.comparePassword(password)) {
+      var message = new Message({
+        user,
+        readOnly: true,
+        type: 'auth_login',
+        column,
+        error: true,
+        token,
+      })
+      await message.save()
+      ctx.throw('Incorrect password', 403)
+    }
   }
 
   await user.populate(User.metaPopulate(true)).execPopulate()
@@ -58,15 +88,14 @@ export default async function (ctx) {
 
   await token.save()
 
-  var log = new Log({
+  var message = new Message({
     user,
+    readOnly: true,
+    type: 'auth_login',
+    column,
     token,
-    application,
-    userAgent: ctx.request.header['user-agent'] || '',
-    path: 'auth/login',
-    ip: ctx.ip,
   })
-  await log.save()
+  await message.save()
 
   ctx.vmState(token)
 }

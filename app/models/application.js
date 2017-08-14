@@ -7,7 +7,6 @@ import reserve from 'config/reserve'
 import model from './model'
 
 
-
 // 应用
 const schema = new Schema({
 
@@ -46,6 +45,9 @@ const schema = new Schema({
     minlength: [3, 'Slug can not be less than 3 bytes ({PATH})'],
     maxlength: [32, 'Slug can not be greater than 32 bytes ({PATH})'],
     match: [/^[0-9a-z_-]+$/, 'Slug only allows the use of English, numbers and _- ({PATH})'],
+    default() {
+      return Application.createRandom(32)
+    },
     validate: [
       {
         validator: reserve,
@@ -73,7 +75,7 @@ const schema = new Schema({
         },
         message: 'Slug already exists ({PATH})',
       },
-    ]
+    ],
   },
 
 
@@ -281,7 +283,9 @@ schema.methods.canScope = function(value) {
   if (!value || value.charAt(0) == '/' || value.indexOf('\\') != -1 || value.indexOf('//') != -1) {
     return false
   }
-
+  if (scopes.indexOf(value) != -1) {
+    return true
+  }
   value = value.replace(/\*\*/g, '*/*')
   var scopes = this.get('scopes')
   var scope
@@ -298,27 +302,88 @@ schema.methods.canScope = function(value) {
 
 schema.methods.can = async function(method) {
   var token = this.getToken()
+  var tokenUser = token ? token.get('user') : void 0
   switch (method) {
+    case 'list':
+      return true
+      break
     case 'read':
-      if (this.get('deletedAt') || this.get('status') == 'block') {
+      if (this.get('deletedAt') && (!tokenUser || !tokenUser.get('admin'))) {
         return false
       }
-      if (!await token.can('application/read')) {
-        return false
-      }
-      if (this.get('status') != 'release') {
-        if (!token.get('user')) {
+
+      if (this.get('status') == 'block') {
+        if (!tokenUser) {
           return false
         }
-        return token.get('user').equals(this.get('creator'))
+        if (!tokenUser.equals(this.get('creator'))) {
+          if (!tokenUser.get('admin') || tokenUser.get('black')) {
+            return false
+          }
+        }
       }
-      return true
+
+      return await token.can('application/read')
       break;
     case 'save':
-
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('black')) {
+        return false
+      }
+      if (this.get('status') == 'block') {
+        return false
+      }
+      if (!tokenUser.equals(this.get('creator')) && !tokenUser.get('admin')) {
+        return false
+      }
+      return await token.can('application/save')
+      break;
+    case 'status':
+      if (this.get('deletedAt')) {
+        return false
+      }
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('black')) {
+        return false
+      }
+      if (!tokenUser.get('admin')) {
+        return false
+      }
+      return await token.can('application/status')
       break;
     case 'delete':
-
+      if (this.get('deletedAt')) {
+        return false
+      }
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('black')) {
+        return false
+      }
+      if (!tokenUser.get('admin')) {
+        return false
+      }
+      return await token.can('application/delete')
+      break;
+    case 'restore':
+      if (!this.get('deletedAt')) {
+        return false
+      }
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('black')) {
+        return false
+      }
+      if (!tokenUser.get('admin')) {
+        return false
+      }
+      return await token.can('application/restore')
       break;
     default:
       return false
@@ -341,6 +406,9 @@ schema.methods.allowedIp = function(value) {
   }
   return false
 }
+
+
+
 schema.statics.forwardIp = function(ctx, def) {
   var value = ctx.query.ip || ctx.query.x_ip
   if (ctx.request.header['x-ip']) {
@@ -388,7 +456,15 @@ schema.statics.createRandom = function(length, lower) {
 schema.set('toJSON', {
   virtuals: true,
   transform(doc, ret) {
-    delete ret.secret
+    var tokenUser = doc.getToken() ? doc.getToken().get('user') : void 0
+    if (!tokenUser || (!tokenUser.get('admin') && !tokenUser.equals(doc.get('creator')))) {
+      delete ret.secret
+      delete ret.auths
+      delete ret.pushUrl
+      delete ret.requestOrigins
+      delete ret.redirectUris
+      delete ret.allowedIps
+    }
   },
 });
 

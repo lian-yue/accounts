@@ -1,5 +1,5 @@
 import { Types } from 'mongoose'
-import Auth from 'models/aurh'
+import Auth from 'models/auth'
 
 
 const ObjectId = Types.ObjectId
@@ -28,12 +28,16 @@ export default async function (ctx, next) {
     query.user = user
   }
 
+  if (params.column) {
+    query.column = String(params.column)
+  }
+
   if (params.value) {
     query.column = String(params.column)
     query.value = String(params.value)
   }
 
-  query.deletedAt = {$exists: params.deleted && tokenUser.canAttribute('admin')}
+  query.deletedAt = {$exists: params.deleted && tokenUser.get('admin') ? true : false}
 
 
   if (params.lt_id) {
@@ -59,6 +63,7 @@ export default async function (ctx, next) {
     result.cans = {
       save: await value.can('save'),
       delete: await value.can('delete'),
+      verification: await value.can('verification'),
     }
     results[i] = result
   }

@@ -1,8 +1,7 @@
 import User from 'models/user'
-import Log from 'models/log'
+import Message from 'models/message'
 
 export default async function (ctx) {
-  // canThrow
   var user = ctx.state.user
   var token = ctx.state.token
   var tokenUser = token.get('user')
@@ -16,9 +15,7 @@ export default async function (ctx) {
       creator: tokenUser,
     })
   }
-  user.setToken(token)
-
-  await user.canThrow('save')
+  await user.setToken(token).canThrow('save')
 
   // 密码
   if (user.isNew) {
@@ -77,28 +74,24 @@ export default async function (ctx) {
 
   await user.save()
 
-  if (isNew) {
-    var data = {}
-    for (let i = 0; i < paths.length; i++) {
-      let path = paths[i]
-      if (path.indexOf('.') != -1 || ['meta', '_id', 'registerIp'].indexOf(path) != -1) {
-        continue
-      }
-      data[path] = path == 'password' ? '***' : user.get(path)
+  var data = {}
+  for (let i = 0; i < paths.length; i++) {
+    let path = paths[i]
+    if (path.indexOf('.') != -1 || ['meta', '_id', 'registerIp'].indexOf(path) != -1) {
+      continue
     }
-
-    var log = new Log({
-      user,
-      token,
-      creator: tokenUser.equals(user) ? void 0 : tokenUser,
-      application: token.get('application'),
-      userAgent: ctx.request.header['user-agent'] || '',
-      path: 'user/save',
-      ip: ctx.ip,
-      data,
-      create: isNew,
-    })
-    await log.save()
+    data[path] = path == 'password' ? '***' : user.get(path)
   }
+
+  var message = new Message({
+    user,
+    creator: tokenUser,
+    type: 'user_save',
+    readOnly: true,
+    data,
+    token,
+  })
+  await message.save()
+
   ctx.vmState(user)
 }

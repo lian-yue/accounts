@@ -1,7 +1,6 @@
 import Router from 'viewModels/router'
 
 import body from 'viewModels/middlewares/body'
-import applicationMiddleware from 'viewModels/middlewares/application'
 import tokenMiddleware from 'viewModels/middlewares/token'
 
 import username from './middlewares/username'
@@ -12,27 +11,27 @@ import save from './save'
 import black from './black'
 import restore from './restore'
 import admin from './admin'
-import log from './log'
-
-// import auth from './auth'
-import notification from './notification'
 
 
-const applicationId = applicationMiddleware({
-  required: false,
-  secret: false,
-})
-
+import message from './message'
+import authorize from './authorize'
+import application from './application'
+import auth from './auth'
+//
 const accessToken = tokenMiddleware({
   types: ['access'],
   user: true,
+  application: {
+    required: false,
+    secret: false,
+  }
 })
 
 const router = new Router
 const usernameRouter = new Router
 
 
-router.use(applicationId, accessToken)
+router.use(accessToken)
 router.opt(ctx => {})
 
 router.get('/', list)
@@ -40,16 +39,18 @@ router.get('/', list)
 router.put(['/', '/save'], body, save)
 router.post(['/', '/save'], body, save)
 
-// router.use('/userauth', auth)
+router.use('/application', application)
+router.use('/userauth', auth)
 
 router.use('/:username', username, usernameRouter)
 
 
-usernameRouter.get('/' read)
-usernameRouter.get('/log', log)
+usernameRouter.get('/', read)
 
-usernameRouter.use('/notification', notification)
-// usernameRouter.use('/auth', auth)
+usernameRouter.use('/message', message)
+usernameRouter.use('/auth', auth)
+usernameRouter.use('/authorize', authorize)
+// usernameRouter.use('/application', application)
 
 usernameRouter.patch('/', save)
 usernameRouter.post('/', save)

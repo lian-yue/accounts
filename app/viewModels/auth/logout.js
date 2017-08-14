@@ -5,6 +5,5 @@ export default async function(ctx) {
   if (!token.get('application')) {
     ctx.cookies.set('access_token', 'deleted',  {...cookieConfig, expires: new Date('1970-02-01'), path:'/', httponly: true});
   }
-  ctx.status = 204
-  ctx.vmState(token)
+  ctx.vmState(token, 204)
 }

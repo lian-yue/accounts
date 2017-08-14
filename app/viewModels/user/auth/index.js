@@ -1,10 +1,7 @@
 import Router from 'viewModels/router'
 
 import body from 'viewModels/middlewares/body'
-import applicationMiddleware from 'viewModels/middlewares/application'
-import tokenMiddleware from 'viewModels/middlewares/token'
-
-import username from '../middlewares/username'
+import rateLimit from 'viewModels/middlewares/rateLimit'
 
 import id from './middlewares/id'
 
@@ -14,27 +11,64 @@ import save from './save'
 import del from './delete'
 import verification from './verification'
 
-const applicationId = applicationMiddleware({
-  required: false,
-  secret: false,
-})
 
-const accessToken = tokenMiddleware({
-  types: ['access'],
-  user: true,
-})
+
+
 
 const router = new Router
 
 
-router.get('/', accessToken, username, list)
-router.get('/:id', accessToken, username, id, read)
+const rateLimitSave = rateLimit({
+  name:'auth_save',
+  limit: 20,
+  key(ctx) {
+    if (ctx.state.auth) {
+      return ctx.state.auth.get('user').toString()
+    }
+    if (ctx.state.user) {
+      return ctx.state.user.get('id')
+    }
+    return false
+  }
+})
 
-router.use(body, applicationId, accessToken, username)
+const rateLimitVerification = rateLimit({
+  name:'auth_verification',
+  limit: 12,
+  key(ctx) {
+    if (ctx.state.auth) {
+      return ctx.state.auth.get('user').toString()
+    }
+    if (ctx.state.user) {
+      return ctx.state.user.get('id')
+    }
+    return false
+  }
+}, {
+  name:'auth_verification_success',
+  limit: 1,
+  key(ctx) {
+    if (ctx.state.auth) {
+      return ctx.state.auth.get('user').toString()
+    }
+    if (ctx.state.user) {
+      return ctx.state.user.get('id')
+    }
+    return false
+  },
+  reset: 30,
+  success: true,
+})
 
-router.put(['/', '/save'], save)
-router.post(['/', '/save'], save)
-router.post('/verification', verification)
+
+router.get('/', list)
+router.get('/:id', id, read)
+
+router.use(body)
+
+router.put(['/', '/save'], rateLimitSave, save)
+router.post(['/', '/save'], rateLimitSave, save)
+router.post('/verification', rateLimitVerification, verification)
 
 router.use(id)
 
@@ -43,6 +77,6 @@ router.post('/:id', save)
 
 router.del('/:id', del)
 
-router.post('/:id/verification', verification)
+router.post('/:id/verification', rateLimitVerification, verification)
 
 export default router

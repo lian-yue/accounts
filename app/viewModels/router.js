@@ -262,7 +262,7 @@ export default class Router {
       }
       Object.assign(opts, newOpts)
     }
-    
+
     if (Array.isArray(opts.path)) {
       opts.path.forEach((path) => {
         this.register(Object.assign({}, opts, {path}));

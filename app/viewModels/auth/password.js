@@ -1,6 +1,6 @@
 import User from 'models/user'
-import Log from 'models/log'
 import Auth from 'models/auth'
+import Message from 'models/message'
 import Verification from 'models/verification';
 
 export default async function(ctx) {
@@ -70,16 +70,13 @@ export default async function(ctx) {
   await token.save()
 
 
-  var log = new Log({
+  var message = new Message({
     user,
+    readOnly: true,
+    type: 'auth_password',
     token,
-    application,
-    retrieve: true,
-    userAgent: ctx.request.header['user-agent'] || '',
-    path: 'auth/password',
-    ip: ctx.ip,
   })
-  await log.save()
+  await message.save()
 
 
   ctx.vmState(token)

@@ -6,6 +6,8 @@ import tokenMiddleware from 'viewModels/middlewares/token'
 import rateLimit from 'viewModels/middlewares/rateLimit'
 
 
+import oauth from './oauth'
+
 import token from './token'
 import exists from './exists'
 
@@ -27,18 +29,31 @@ const applicationId = applicationMiddleware({
   secret: false,
   required: false,
   strict: false,
+  auths: ['cors'],
 })
 
 const accessToken = tokenMiddleware({
   types: ['access'],
+  auths: ['cors'],
   user: false,
-  log: false,
+  application: {
+    secret: false,
+    required: false,
+    strict: false,
+    auths: ['cors'],
+  },
 })
 
-const logoutAccessToken = tokenMiddleware({
+const logoutToken = tokenMiddleware({
   types: ['access'],
+  auths: ['cors'],
   black: false,
-  log: false,
+  application: {
+    secret: false,
+    required: false,
+    strict: false,
+    auths: ['cors'],
+  },
 })
 
 const rateLimitToken = rateLimit({
@@ -90,7 +105,7 @@ const rateLimitLoginVerification = rateLimit({
     to: [value => String(value).trim().toLocaleLowerCase()],
   },
   limit: 1,
-  reset: 60,
+  reset: 30,
   success: true,
 })
 
@@ -139,7 +154,7 @@ const rateLimitCreateVerification = rateLimit({
     to: [value => String(value).trim().toLocaleLowerCase()],
   },
   limit: 1,
-  reset: 60,
+  reset: 30,
   success: true,
 })
 
@@ -191,27 +206,19 @@ const rateLimitPasswordVerification = rateLimit({
   success: true,
 })
 
-const authCros = function(ctx, next) {
-  var application = ctx.state.application
-  if (!application && ctx.state.token) {
-    application = ctx.state.token.get('application')
-  }
-  if (application && !application.get('auths').get('cors')) {
-    ctx.throw('The authorization mode is not allowed', 400, {code: 'unsupported_response_type'})
-  }
-  return next()
-}
 
-router.get('/token', applicationId, authCros, rateLimitToken, token)
+router.use('/oauth/:column', oauth)
+
+
+router.get('/token', applicationId, rateLimitToken, token)
 router.opt('/token', applicationId)
 
 
-router.post('/logout', body, applicationId, logoutAccessToken, authCros, logout)
-router.opt('/logout', applicationId, logoutAccessToken)
+router.post('/logout', body, logoutToken, logout)
+router.opt('/logout', logoutToken)
 
 
-
-router.use(body, applicationId, accessToken, authCros)
+router.use(body, accessToken)
 
 router.get('/exists', rateLimitExists, exists)
 

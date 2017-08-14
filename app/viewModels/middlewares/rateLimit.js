@@ -15,7 +15,7 @@ export default (...opts) => {
     reset: 1800,
     success: null,
     before: false,
-    filter: (ctx) => true,
+    key: (ctx) => '',
     message: 'Request too often please {TIME} and try again',
   }
   return async (ctx, next) => {
@@ -32,14 +32,12 @@ export default (...opts) => {
     for (let i = 0; i < opts.length; i++) {
       let opt = opts[i]
       opt = Object.assign({}, defaultOpt, opt)
-      if (!opt.filter(ctx)) {
+      let key2 = opt.key(ctx)
+      if (!key2 === false || key2 === void 0 || key2 === null) {
         continue;
       }
       newOpts.push(opt)
-      let key = []
-      if (opt.key) {
-        key.push(opt.key(ctx))
-      }
+      let key = [key2]
       if (opt.ip) {
         key.push(ctx.ip)
       }

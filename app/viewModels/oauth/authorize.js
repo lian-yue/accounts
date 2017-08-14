@@ -1,5 +1,5 @@
-import Log from 'models/log'
 import Token from 'models/token'
+import Message from 'models/message'
 import Authorize from 'models/authorize'
 
 
@@ -40,16 +40,15 @@ export default async function (ctx) {
 
   var authorize = await Authorize.findOneCreate(user, application)
 
-  var log = new Log({
+  var message = new Message({
     user,
-    token,
     application,
+    readOnly: true,
     oauth: true,
-    userAgent: ctx.request.header['user-agent'] || '',
-    path: 'auth/login',
-    ip: ctx.ip,
+    type: 'auth_login',
+    token,
   })
-  await log.save()
+  await message.save()
 
   if (responseType == 'token') {
     var accessToken = new Token({
@@ -59,12 +58,13 @@ export default async function (ctx) {
       type: 'access',
       scopes,
     })
-    accessToken.updateLog(ctx)
+    accessToken.updateLog(ctx, false)
     await accessToken.save()
     ctx.vmState({
       ...accessToken.toJSON(),
-      access_token: accessToken.get('token') + accessToken.get('key')
+      access_token: accessToken.get('token') + accessToken.get('secret')
     })
+    return
   }
 
   var codeToken = new Token({
@@ -77,13 +77,12 @@ export default async function (ctx) {
     },
     scopes,
   })
-  codeToken.updateLog(ctx)
+  codeToken.updateLog(ctx, false)
   await codeToken.save()
-
 
 
   ctx.vmState({
     ...codeToken.toJSON(),
-    code: codeToken.get('token') + codeToken.get('key')
+    code: codeToken.get('token') + codeToken.get('secret')
   })
 }

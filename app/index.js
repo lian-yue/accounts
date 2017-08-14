@@ -9,6 +9,7 @@ import 'source-map-support/register'
 
 import packageInfo from 'package'
 
+global.__SERVER__ = true
 
 var models = require('models').default
 var viewModels = require('viewModels').default
@@ -23,7 +24,6 @@ if (module.hot) {
 
 // Add http 451
 http.STATUS_CODES[451] = 'Unavailable For Legal Reasons'
-
 
 export default function() {
 
@@ -121,8 +121,11 @@ export default function() {
   };
 
 
-  app.context.vmState = function(state) {
+  app.context.vmState = function(state, status) {
     this.state.vm = this.state.vm || {}
+    if (status) {
+      ctx.status = status
+    }
     if (state) {
       if (typeof state.toJSON == 'function') {
         state = state.toJSON();
@@ -240,7 +243,7 @@ export default function() {
   // 错误捕获
   app.on('error', function(err, ctx) {
     var date = moment().format('YYYY-MM-DD hh:mm:ss')
-    if (err.status >= 500) {
+    if (err.status || !err.status >= 500) {
       console.error(date, 'server error :', err, ctx);
     } else {
       console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${err.message}`);

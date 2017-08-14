@@ -14,7 +14,7 @@ export default async function(ctx) {
     ctx.throw('帐号不能为空', 403)
   }
 
-  var user = await User.findByUsername(username, true)
+  var user = await User.findByAuth(username)
 
   if (!user) {
     ctx.throw('用户不存在', 404)

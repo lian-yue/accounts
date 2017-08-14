@@ -14,7 +14,6 @@ router.use('/oauth', oauth)
 router.use('/auth', auth)
 router.use(user)
 
-
 export default router
 
 if (module.hot) {

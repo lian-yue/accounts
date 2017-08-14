@@ -20,6 +20,7 @@ const schema = new Schema({
     type: String,
     default: '0.0.0.0',
   },
+
   token: {
     type: Schema.Types.ObjectId,
     index: true,
@@ -103,7 +104,7 @@ const schema = new Schema({
     index: true,
     default: () => {
       var date = new Date();
-      date.setTime(date.getTime() + 15 * 60 * 1000);
+      date.setTime(date.getTime() + 1000 * 600)
       return date;
     }
   },
@@ -240,7 +241,7 @@ schema.statics.findByCode = async function(options) {
     // 验证值不对
     if (verification.get('code') !== options.code) {
       // 增加一次错误次
-      await verification.update({$inc:{error:1}});
+      await verification.update({$inc:{error:1}}).exec();
       continue;
     }
 
@@ -261,4 +262,8 @@ schema.statics.findByCode = async function(options) {
 }
 
 
-export default model('Verification', schema);
+export default model('Verification', schema, {
+  shardKey: {
+    token: 1,
+  },
+})

@@ -1,13 +1,24 @@
-import Auth from 'models/aurh'
-import oauth from 'config/oauth'
-export default async function (ctx, next) {
+import Auth from 'models/auth'
+import Message from 'models/message'
+import Application from 'models/application'
+import Verification from 'models/verification'
+import oauthConfig from 'config/oauth'
+
+export default async function (ctx) {
   var auth = ctx.state.auth
   var token = ctx.state.token
+  var tokenUser = token.get('user')
+  var params = {
+    ...ctx.request.query,
+  }
+  if (ctx.request.body && typeof ctx.request.body == 'object') {
+    Object.assign(params, ctx.request.body)
+  }
+
   await auth.setToken(token).canThrow('delete')
 
-
-  var column = auth.get('column')
-  var isOAuth = oauth[column]
+  const column = auth.get('column')
+  const isAdmin = !tokenUser.equals(auth.get('user'))
 
 
   // 必须保留一个的
@@ -15,30 +26,48 @@ export default async function (ctx, next) {
     ctx.throw('必须保留一个' + (column == 'email' ? '电子邮箱': '手机号'), 403)
   }
 
-
   // 没密码必须保留个 oauth 登录
-  if (isOAuth && !user.get('password') && !await Auth.findOne({user: auth.get('user'), _id:{$ne:auth.get('_id')}, column:{$in:Object.keys(oauth)}, deletedAt:{$exists:false}}).exec()) {
+  if (oauthConfig[column] && !user.get('password') && !await Auth.findOne({user: auth.get('user'), _id:{$ne:auth.get('_id')}, column:{$in:Object.keys(oauthConfig)}, deletedAt:{$exists:false}}).exec()) {
     ctx.throw('你还没设置密码，必须保留一个绑定账号', 403)
   }
 
-  if (isOAuth) {
-    var password
-    if (ctx.request.body instanceof Object && ctx.request.body.password) {
-      password = ctx.request.body.password
-    } else {
-      password = ctx.request.query.password
+  if (await auth.can('verification')) {
+    // 不需要认证的
+  } else if (column == 'phone' || column == 'email') {
+    // 手机 邮箱
+    if (!params.code) {
+      ctx.throw('验证码不能为空', 403);
     }
-    if (user.get('password') && !await user.comparePassword(password || '')) {
-      e = new Error('密码错误');
-      e.code = 'ValidatorError';
-      throw e;
+    var verification = await Verification.findByCode({
+      token,
+      type: 'auth_delete',
+      code: params.code,
+      user: auth.get('user'),
+      to: auth.get('value'),
+      toType: column == 'phone' ? 'sms' : column,
+    })
+    if (!verification && ctx.app.env != 'development') {
+      ctx.throw('验证码不正确', 403);
     }
   } else {
-
+    // 其他需要输入登陆密码
+    if (user.get('password') && !await user.comparePassword(params.password || '')) {
+      ctx.throw('密码错误', 403)
+    }
+  }
 
   auth.set('deletedAt', new Date)
   await auth.save()
 
-  ctx.status = 204
-  ctx.vmState(auth)
+  var message = new Message({
+    user: auth.get('user'),
+    creator: tokenUser,
+    application: token.get('application'),
+    type: 'auth_delete',
+    readOnly: true,
+    display: auth.get('display'),
+    token,
+  })
+  await message.save()
+  ctx.vmState(auth, 204)
 }
