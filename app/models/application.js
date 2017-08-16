@@ -297,7 +297,7 @@ schema.methods.canScope = function(value) {
       return true
     }
   }
-  return false
+  return value
 }
 
 schema.methods.can = async function(method) {
@@ -305,10 +305,16 @@ schema.methods.can = async function(method) {
   var tokenUser = token ? token.get('user') : void 0
   switch (method) {
     case 'list':
-      return true
+      if (!tokenUser) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('application/list')
       break
     case 'read':
-      if (this.get('deletedAt') && (!tokenUser || !tokenUser.get('admin'))) {
+      if (this.get('deletedAt') && (!tokenUser || !tokenUser.get('admin') || tokenUser.get('black'))) {
         return false
       }
 
@@ -322,7 +328,6 @@ schema.methods.can = async function(method) {
           }
         }
       }
-
       return await token.can('application/read')
       break;
     case 'save':
@@ -332,7 +337,7 @@ schema.methods.can = async function(method) {
       if (tokenUser.get('black')) {
         return false
       }
-      if (this.get('status') == 'block') {
+      if (this.get('deletedAt')) {
         return false
       }
       if (!tokenUser.equals(this.get('creator')) && !tokenUser.get('admin')) {
@@ -384,6 +389,35 @@ schema.methods.can = async function(method) {
         return false
       }
       return await token.can('application/restore')
+      break;
+    case 'scope':
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('block')) {
+        return false
+      }
+      if (!tokenUser.get('admin')) {
+        return false
+      }
+      return true
+      break;
+    case 'auths_password':
+    case 'auths_implicit':
+    case 'auths_cors':
+      if (!tokenUser) {
+        return false
+      }
+      if (tokenUser.get('block')) {
+        return false
+      }
+      if (tokenUser.get('admin')) {
+        return true
+      }
+      if (token.get('auths')[method.substr(6)]) {
+        return true
+      }
+      return false
       break;
     default:
       return false

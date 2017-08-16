@@ -50,6 +50,13 @@ export default async function (ctx) {
     application.set('secret', Application.createRandom(32))
   }
 
+  // 审核
+  if (await application.can('status') && (application.isNew || params.status)) {
+    application.set('status', params.status || 'release')
+  } else if (application.isModified(['name', 'slug', 'content', 'homeUrl', 'logoUrl'])) {
+    application.set('status', 'pending')
+  }
+
   if (params.requestOrigins !== void 0) {
     var requestOrigins = []
     if (typeof params.requestOrigins == 'string') {
@@ -119,7 +126,14 @@ export default async function (ctx) {
     var newScopes = []
     for (let i = 0; i < scopes.length; i++) {
       let scope = scopes[i]
-      if (application.canScope(scope)) {
+      if (typeof scope != 'string') {
+        continue
+      }
+      scope = scope.toLocaleLowerCase().replace(/[^0-9a-z*\/_-]/g, '').replace(/^\/+|\/+$/g, '')
+      if (!scope) {
+        continue
+      }
+      if (application.canScope(scope) || await application.can('scope')) {
         newScopes.push(scope)
       }
     }

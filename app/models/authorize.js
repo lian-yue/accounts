@@ -77,6 +77,72 @@ const schema = new Schema({
 schema.index({user:1, application: 1}, {unique: true})
 
 
+schema.statics.can = async function(method) {
+  switch (method) {
+    case 'list':
+      if (!tokenUser) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('authorize/list')
+      break
+    case 'read':
+      if (!tokenUser) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('authorize/read')
+      break
+    case 'clear':
+      if (!tokenUser) {
+        return false
+      }
+      if (token.get('application') && !token.get('application').equals(this.get('application'))) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('authorize/clear')
+      break
+    case 'delete':
+      if (!tokenUser) {
+        return false
+      }
+      if (token.get('application') && !token.get('application').equals(this.get('application'))) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('authorize/delete')
+      break
+    case 'save':
+      if (!tokenUser) {
+        return false
+      }
+      if (!this.get('application').equals(token.get('application'))) {
+        return false
+      }
+      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
+        return false
+      }
+      return await token.can('authorize/save')
+      break
+    default:
+      return false
+  }
+
+
+
+
+
+}
+
 schema.statics.findOneCreate = async function(user, application) {
   //  创建 authorize
   var authorize = await this.findOne({
@@ -114,7 +180,7 @@ schema.pre('save', async function() {
     return
   }
   this.savePost(async () => {
-    await require('./token').default.updateMany({user: this, application: this.get('application'), createdAt: {$lt: this.get('deletedAt')}, deletedAt: {$exists: false}}, {$set: {deletedAt: new Date}}, {w:0}).exec()
+    await require('./token').default.updateMany({user: this, application: this.get('application')}, deletedAt: {$exists: false}}, {$set: {deletedAt: new Date}}, {w:0}).exec()
   })
 })
 
