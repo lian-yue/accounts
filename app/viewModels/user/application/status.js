@@ -17,7 +17,7 @@ export default async function (ctx) {
     user: application.get('creator'),
     type: 'application_status',
     creator: tokenUser,
-    readAt: user.equals(tokenUser) ? new Date, void 0,
+    readAt: user.equals(tokenUser) ? new Date : void 0,
     status: application.get('status'),
     reason: application.get('reason'),
     token,

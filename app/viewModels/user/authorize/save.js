@@ -1,6 +1,5 @@
 import { Types } from 'mongoose'
 import Role from 'models/role'
-import Message from 'models/message'
 
 const ObjectId = Types.ObjectId
 export default async function (ctx) {

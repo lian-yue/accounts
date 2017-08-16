@@ -18,7 +18,7 @@ export default async function (ctx) {
     user: application.get('creator'),
     type: 'application_restore',
     creator: tokenUser,
-    readAt: user.equals(tokenUser) ? new Date, void 0,
+    readAt: user.equals(tokenUser) ? new Date : void 0,
     reason: application.get('reason'),
     token,
   })
