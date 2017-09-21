@@ -1,1 +1,1 @@
-module.exports =  "mongodb://localhost/accounts";
+module.exports = 'mongodb://localhost/accounts'

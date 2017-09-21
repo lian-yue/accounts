@@ -1,88 +1,77 @@
-import FB from 'fb'
+/* @flow */
 import {facebook as config} from 'config/oauth'
-import Component from './component'
+import Api from './api'
 
-config.appId = config.appId || config.app_id || config.clientId ||  config.client_id
-config.appSecret = config.appSecret || config.app_secret || config.clientSecret ||  config.client_secret
+config.appId = config.appId || config.app_id || config.clientId || config.client_id
+config.appSecret = config.appSecret || config.app_secret || config.clientSecret || config.client_secret
 config.scope = config.scope || config.scopes
-if (config.scope instanceof Array) {
-  config.scope = config.scope.join(',')
+if (!(config.scope instanceof Array)) {
+  config.scope = config.scope.split(/[|, ]/)
 }
-config.version = 'v2.7'
+
+export default class Facebook extends Api {
+
+  baseUri: string = 'https://graph.facebook./v2.10'
+
+  accessTokenPath: string = '/oauth/access_token'
+
+  authorizePath: string = 'https://www.facebook.com/v2.10/dialog/oauth'
+
+  name: string = config.name
 
 
-export default class FaceBook extends Component{
-
-  name = config.name
-
-  get client() {
-    if (!this._client) {
-      this._client = FB.extend(config);
+  constructor(clientId: string = config.appId, clientSecret: string = config.appSecret) {
+    super(clientId, clientSecret)
+    this.setScope(config.scope)
+    if (config.redirectUri) {
+      this.setRedirectUri(config.redirectUri)
     }
-    return this._client;
   }
 
-  async getAccessToken() {
-    if (!this._accessToken) {
-      if (!this.query.code) {
-        throw new Error('The code is empty')
-      }
-      this._accessToken = await new Promise((resolve, reject) => {
-        this.client.napi('oauth/access_token', {
-          client_id: this.client.options('appId'),
-          client_secret: this.client.options('appSecret'),
-          redirect_uri: this._redirectUri,
-          state: this.state,
-          code: this.query.code,
-        }, (err, result) => {
-          if (err) {
-            reject(err)
-            return
-          }
-          result.created_at = new Date;
-          this.client.setAccessToken(result.access_token);
-          resolve(result)
-        });
-      })
+  async getAccessTokenByAuthorizationCode(params: Object = {}): Promise<accessTokenType> {
+    if (!params.code || typeof params.code !== 'string') {
+      throw new Error('The "code" is empty')
     }
-    return this._accessToken
+    if (!params.state || typeof params.state !== 'string') {
+      throw new Error('The "state" is empty')
+    }
+
+    let data = await this.getAuthorizeData(params)
+
+    if (!data) {
+      throw new Error('"state" does not exist')
+    }
+
+    let query = {
+      ...params,
+      code: params.code,
+      state: params.state,
+      grant_type: 'authorization_code',
+      client_id: this.clientId,
+      client_secret: this.clientSecret,
+      redirect_uri: this.redirectUri,
+    }
+    let accessToken: accessTokenType = await this.request('GET', this.accessTokenPath, query)
+    return this.setAccessToken(accessToken) || {}
   }
 
-  setAccessToken(accessToken) {
-    if (accessToken && !(accessToken instanceof Object)) {
-      throw new Error('Token is not an object')
+  async getUserInfo(): Promise<Object> {
+    if (this.userInfo) {
+      return this.userInfo
     }
-    this._accessToken = accessToken
-    this.client.setAccessToken(accessToken.access_token || null);
-    return this
-  }
-
-
-  async getUserInfo() {
-    if (this._userInfo) {
-      return this._userInfo
-    }
-    var userInfo = await new Promise((resolve, reject) => {
-      this.client.napi('me', {fields: ['id', 'name', 'gender', 'locale', 'timezone', 'verified', 'email', 'birthday']}, (err, result) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        resolve(result);
-      });
+    let userInfo = await this.api('GET', '/me', {
+      fields: ['id', 'name', 'gender', 'locale', 'timezone', 'verified', 'email', 'birthday'].join(',')
     })
 
-    var picture = await new Promise((resolve, reject) => {
-      this.client.napi('me/picture', {redirect:0, height:256, width:256, type: 'normal'}, (err, result) => {
-        if (err) {
-          reject(err)
-          return
-        }
-        resolve(result);
-      });
+    let picture = await this.api('GET', '/picture', {
+      redirect: 0,
+      height: 256,
+      width: 256,
+      type: 'normal'
     })
 
-    var result = {}
+
+    let result = {}
 
     const columns = {
       id: 'id',
@@ -111,12 +100,41 @@ export default class FaceBook extends Component{
     return this.filterUserInfo(result)
   }
 
+  response(response: Object): Object {
+    let body: Object = response.body ? JSON.parse(response.body) : {}
 
-  async redirectUri() {
-    return this.client.getLoginUrl({
-      scope: config.scope,
-      redirect_uri: this._redirectUri,
-      state: this.state,
-    });
+    let message
+    if (body.error_description) {
+      message = body.error_description
+    } else if (body.error) {
+      if (typeof body.error === 'object') {
+        message = body.error.message
+      } else {
+        message = body.error
+      }
+    } else if (body.error_msg) {
+      message = body.error_msg
+    } else if (body.error_message) {
+      message = body.error_message
+    } else if (body.error_code) {
+      message = 'Error code: ' + body.error_code
+    } else if (response.statusCode >= 400) {
+      message = 'Error status code: ' + response.statusCode
+    }
+
+    if (message) {
+      let e = new Error(message)
+      if (body.error && typeof body.error === 'object' && body.error.code) {
+        e.code = Number(body.error.code)
+      } else if (body.error_code) {
+        e.code = Number(body.error_code)
+      }
+      if (response.statusCode >= 400) {
+        e.statusCode = response.statusCode
+      }
+      throw e
+    }
+    return body
   }
+
 }

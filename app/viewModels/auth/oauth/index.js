@@ -30,11 +30,12 @@ const router = new Router
 
 router.use(body, accessToken, column)
 
-router.get('/login', login)
+
+router.get('/token', token)
+router.post('/login', login)
 router.post('/logout', logout)
 
-router.get('/callback', callback)
-router.get('/token', token)
+router.post('/callback', callback)
 
 
 

@@ -22,6 +22,6 @@ export default async function (ctx) {
       black: await user.can('black'),
       restore: await user.can('restore'),
     },
-    authorize: me && token.get('authorize') ? token.get('authorize').toJSON() : undefined,
+    authorize: me && token.get('authorize') ? token.get('authorize').toJSON() : void 0,
   })
 }

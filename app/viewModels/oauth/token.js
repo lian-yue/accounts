@@ -177,7 +177,7 @@ export default async function (ctx) {
         var message = new Message({
           user,
           application,
-          type: 'auth_login',
+          type: 'user_login',
           readOnly: true,
           error: true,
           oauth: true,
@@ -219,7 +219,7 @@ export default async function (ctx) {
 
       var message = new Message({
         user,
-        type: 'auth_login',
+        type: 'user_login',
         readOnly: true,
         oauth: true,
         token: accessToken,
@@ -255,7 +255,7 @@ export default async function (ctx) {
 
       var message = new Message({
         user,
-        type: 'auth_login',
+        type: 'user_login',
         readOnly: true,
         oauth: true,
         userAgent: Application.forwardUserAgent(ctx, ''),

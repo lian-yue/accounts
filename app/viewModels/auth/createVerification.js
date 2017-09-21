@@ -14,7 +14,7 @@ export default async function(ctx) {
   var verification = new Verification({
     ip: ctx.ip,
     token,
-    type: 'auth_create',
+    type: 'user_save',
     toType: toType == 'phone' ? 'sms' : toType,
     to,
     nickname: '尊敬的用户',

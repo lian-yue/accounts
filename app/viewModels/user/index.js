@@ -2,8 +2,7 @@ import Router from 'viewModels/router'
 
 import body from 'viewModels/middlewares/body'
 import tokenMiddleware from 'viewModels/middlewares/token'
-
-import username from './middlewares/username'
+import userMiddleware from './middlewares/user'
 
 import list from './list'
 import read from './read'
@@ -17,7 +16,8 @@ import message from './message'
 import authorize from './authorize'
 import application from './application'
 import auth from './auth'
-//
+
+
 const accessToken = tokenMiddleware({
   types: ['access'],
   user: true,
@@ -28,9 +28,10 @@ const accessToken = tokenMiddleware({
 })
 
 const router = new Router
-const usernameRouter = new Router
+const userRouter = new Router
 
 
+router.use('/application', application)
 router.use(accessToken)
 router.opt(ctx => {})
 
@@ -39,32 +40,31 @@ router.get('/', list)
 router.put(['/', '/save'], body, save)
 router.post(['/', '/save'], body, save)
 
-router.use('/application', application)
 router.use('/userauth', auth)
 
-router.use('/:username', username, usernameRouter)
+router.use('/:user', userMiddleware, userRouter)
 
 
-usernameRouter.get('/', read)
+userRouter.get('/', read)
 
-usernameRouter.use('/message', message)
-usernameRouter.use('/auth', auth)
-usernameRouter.use('/authorize', authorize)
-// usernameRouter.use('/application', application)
+userRouter.use('/message', message)
+userRouter.use('/auth', auth)
+userRouter.use('/authorize', authorize)
+userRouter.use('/application', application)
 
-usernameRouter.patch('/', save)
-usernameRouter.post('/', save)
+userRouter.patch('/', save)
+userRouter.post('/', save)
 
-usernameRouter.put('/black', black)
-usernameRouter.post('/black', black)
+userRouter.put('/black', black)
+userRouter.post('/black', black)
 
-usernameRouter.del('/black', restore)
-usernameRouter.post('/restore', restore)
+userRouter.del('/black', restore)
+userRouter.post('/restore', restore)
 
 
-usernameRouter.put('/admin', admin)
-usernameRouter.post('/admin', admin)
-usernameRouter.del('/admin', admin)
+userRouter.put('/admin', admin)
+userRouter.post('/admin', admin)
+userRouter.del('/admin', admin)
 
 
 export default router

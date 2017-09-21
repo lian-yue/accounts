@@ -1,4 +1,4 @@
-var reserve = [
+let reserve = [
   'me',
   'all',
   'userauth',
@@ -66,13 +66,14 @@ var reserve = [
 ]
 
 
-module.exports = function(value) {
-  if (typeof value != 'string' || value < 3) {
+module.exports = function (_value) {
+  let value = _value
+  if (typeof value !== 'string' || value < 3) {
     return false
   }
   value = value.trim().toLocaleLowerCase()
-  if (value.substr(-1, 1) == 's') {
-    value = value.substr(0, value.length -1)
+  if (value.substr(-1, 1) === 's') {
+    value = value.substr(0, value.length - 1)
   }
-  return reserve.indexOf(value) == -1
+  return reserve.indexOf(value) === -1
 }

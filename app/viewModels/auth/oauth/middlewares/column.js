@@ -1,4 +1,4 @@
-import oauths from 'models/auth/oauth'
+import * as oauths from 'models/auth/oauth'
 import oauthConfig from 'config/oauth'
 export default async function(ctx, next) {
   const token = ctx.state.token
@@ -11,15 +11,13 @@ export default async function(ctx, next) {
     ctx.throw('暂不支持', 404)
   }
 
-  const oauth = new OAuth(ctx.query, ctx.request.protocol + '://' + ctx.host + ctx.path.replace(/[^\/]+\/?$/g, '') + 'callback')
+  const oauth = new OAuth(ctx.query, ctx.request.protocol + '://' + ctx.host + ctx.path.replace(/[^\/]+\/?$/g))
 
   oauth.cacheKey = 'auth.oauth.' + column + token.get('id')
   oauth.column = column
-  oauth.state = token.get('state.auth.' + column) || {}
   oauth.name = oauthConfig[column].name
 
   ctx.state.oauth = oauth
-
 
   await next()
 }

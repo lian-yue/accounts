@@ -33,7 +33,7 @@ export default async function(ctx) {
   var verification  = await Verification.findByCode({
     user,
     token,
-    type: 'auth_password',
+    type: 'user_password',
     code,
     to: auth.get('value'),
     test: params.test,
@@ -73,7 +73,10 @@ export default async function(ctx) {
   var message = new Message({
     user,
     readOnly: true,
-    type: 'auth_password',
+    type: 'user_save',
+    data: {
+      password: '***',
+    },
     token,
   })
   await message.save()

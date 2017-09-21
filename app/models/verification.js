@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer'
-import {Schema, Types} from 'mongoose'
+import {Schema} from 'mongoose'
 import emailConfig from 'config/email'
 import phoneConfig from 'config/phone'
 import siteConfig from 'config/site'
@@ -8,11 +8,11 @@ import model from './model'
 
 import * as validator from './validator'
 
-import { TopClient } from './topClient'
+import {TopClient} from './topClient'
 
-const email = nodemailer.createTransport(emailConfig);
+const email = nodemailer.createTransport(emailConfig)
 
-const phone = new TopClient(phoneConfig);
+const phone = new TopClient(phoneConfig)
 
 
 const schema = new Schema({
@@ -44,29 +44,29 @@ const schema = new Schema({
     validate: [
       {
         validator(to) {
-          if (this.get('toType') != 'email') {
-            return true;
+          if (this.get('toType') !== 'email') {
+            return true
           }
-          to = validator.email(to);
-          if (!to) {
-            return false;
+          let value = validator.email(to)
+          if (!value) {
+            return false
           }
-          this.set('to', to);
-          return true;
+          this.set('to', value)
+          return true
         },
         message: '发送地址不是电子邮箱 ({PATH})',
       },
       {
         validator(to) {
-          if (this.get('toType') != 'sms') {
-            return true;
+          if (this.get('toType') !== 'sms') {
+            return true
           }
-          to = validator.mobilePhone(to);
-          if (!to) {
-            return false;
+          let value = validator.mobilePhone(to)
+          if (!value) {
+            return false
           }
-          this.set('to', to);
-          return true;
+          this.set('to', value)
+          return true
         },
         message: '发送地址不是手机号 ({PATH})',
       },
@@ -103,162 +103,158 @@ const schema = new Schema({
     type: Date,
     index: true,
     default: () => {
-      var date = new Date();
+      let date = new Date()
       date.setTime(date.getTime() + 1000 * 600)
-      return date;
+      return date
     }
   },
-});
+})
 
 
-schema.pre('save',  async function() {
+schema.preAsync('save', async function () {
   if (!this.isNew) {
-    return;
+    return
   }
-
-  var code = this.get('code')
+  let code = this.get('code')
   if (!code) {
-    code = '000000' + Math.round(Math.random() * 999999).toString();
+    code = '000000' + Math.round(Math.random() * 999999).toString()
     code = code.substr(code.length - 6)
-    this.set('code', code);
+    this.set('code', code)
   }
-
-  const to = this.get('to');
-  const used = this.get('used');
-  const nickname = this.get('nickname') || user.get('username');
-
+  const to = this.get('to')
+  const used = this.get('used')
+  const nickname = this.get('nickname')
 
   switch (this.get('toType')) {
     case 'email':
-      var data = {
-        to,
-        from: emailConfig.from,
-        subject: `【${siteConfig.title}】 ${used} 验证码`,
-        text: `您好 ${nickname}。 \r\n您的验证码为 ${code}  \r\n它用于${used}。`,
-        html: `<p>您好 ${nickname.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}。 </p><p>您的验证码为  ${code}</p><p>它用于${used}。</p>`,
-      }
-      await new Promise(function(resolve, reject) {
+      await new Promise(function (resolve, reject) {
+        let data = {
+          to,
+          from: emailConfig.from,
+          subject: `【${siteConfig.title}】 ${used} 验证码`,
+          text: `您好 ${nickname}。 \r\n您的验证码为 ${code}  \r\n它用于${used}。`,
+          html: `<p>您好 ${nickname.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}。 </p><p>您的验证码为  ${code}</p><p>它用于${used}。</p>`,
+        }
         email.sendMail(data, (e, info) => {
           if (e) {
-            return reject(e);
+            return reject(e)
           }
-          return resolve();
-        });
-      });
-      break;
+          return resolve()
+        })
+      })
+      break
     case 'sms':
-      await new Promise(function(resolve, reject) {
+      await new Promise((resolve, reject) => {
         phone.execute('alibaba.aliqin.fc.sms.num.send', {
-           extend : '' ,
-           sms_type: 'normal',
-           sms_free_sign_name : phoneConfig.sms_free_sign_name,
-           sms_param : JSON.stringify({used, nickname, code}),
-           rec_num : to,
-           sms_template_code : phoneConfig.sms_template_code,
+          extend: '',
+          sms_type: 'normal',
+          sms_free_sign_name: phoneConfig.sms_free_sign_name,
+          sms_param: JSON.stringify({used, nickname, code}),
+          rec_num: to,
+          sms_template_code: phoneConfig.sms_template_code,
         }, (e, response) => {
           if (response && response.error_response) {
-            if (response.error_response.code == 15) {
-              e = new Error('请求频率过快请稍后再试');
-              e.status = 403;
+            if (response.error_response.code === 15) {
+              this.throw(403, '请求频率过快请稍后再试')
             }
           }
           if (e) {
-            return reject(e);
+            return reject(e)
           }
           resolve(null)
-        });
+        })
       })
-      break;
+      break
     default:
       throw new Error('Verification type unknown')
   }
-});
+})
+
 
 
 
 schema.set('toJSON', {
-  transform (doc, ret) {
-    delete ret.code;
-    delete ret.ip;
-    delete ret.to;
+  transform(doc, ret) {
+    delete ret.code
+    delete ret.ip
+    delete ret.to
   },
-});
+})
 
 
-schema.statics.findByCode = async function(options) {
-
-  var query = {
+schema.statics.findByCode = async function findByCode(options) {
+  let query = {
     token: options.token,
     type: options.type,
-  };
-
-  if (options.toType) {
-    query.toType = options.toType;
   }
 
-  var verifications = await this.find(query, null, {
+  if (options.toType) {
+    query.toType = options.toType
+  }
+
+  let verifications = await this.find(query, null, {
     limit: 3,
     sort: {
       expiredAt: -1,
     }
-  }).exec();
+  }).exec()
 
-  var isBreak = false;
-  var now = new Date;
-
+  let isBreak = false
+  let now = new Date
+  let verification
   for (let i = 0; i < verifications.length; i++) {
-    var verification = verifications[i];
+    verification = verifications[i]
     // 已使用
     if (verification.get('usedAt')) {
-      continue;
+      continue
     }
 
     // 已过期
     if (now > verification.get('expiredAt')) {
-      continue;
+      continue
     }
 
     // 错误次数过多
     if (verification.get('error') >= 5) {
-      continue;
+      continue
     }
 
     // user 不对
     if (options.user && (!verification.get('user') || !verification.get('user').equals(options.user))) {
-      continue;
+      continue
     }
 
     // to 不对
     if (options.to && verification.get('to') !== options.to) {
-      continue;
+      continue
     }
 
     // toType 不对
     if (options.toType && verification.get('toType') !== options.toType) {
-      continue;
+      continue
     }
 
     // 验证值不对
     if (verification.get('code') !== options.code) {
       // 增加一次错误次
-      await verification.update({$inc:{error:1}}).exec();
-      continue;
+      await verification.update({$inc: {error: 1}}).exec()
+      continue
     }
 
-    isBreak = true;
-    break;
+    isBreak = true
+    break
   }
 
   if (!isBreak) {
-    return false;
+    return null
   }
 
   if (!options.test) {
-    verification.set('usedAt', now);
-    await verification.save();
+    verification.set('usedAt', now)
+    await verification.save()
   }
 
-  return verification;
+  return verification
 }
 
 

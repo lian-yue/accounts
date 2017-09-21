@@ -15,7 +15,12 @@ export default async function (ctx, next) {
     token = await accessToken(ctx)
     ctx.state.rateLimit = false
   } catch (e) {
+    if (!ctx.query.create) {
+      ctx.vmState({})
+      return
+    }
   }
+
 
 
   if (!token) {
@@ -61,6 +66,6 @@ export default async function (ctx, next) {
 
   ctx.vmState({
     ...token.toJSON(),
-    access_token: isNew && application ? token.get('id') + token.get('secret') : undefined,
+    access_token: isNew && application ? token.get('id') + token.get('secret') : void 0,
   })
 }

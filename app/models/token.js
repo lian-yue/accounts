@@ -1,20 +1,16 @@
-import {Schema, Types} from 'mongoose'
+/* @flow */
+import {Schema} from 'mongoose'
 
 import ip from 'ip'
 
 import model from './model'
-
-import validator from './validator'
-
-import Authorize from './authorize'
-import Application from './application'
 
 
 const schema = new Schema({
   secret: {
     type: String,
     default() {
-      return Application.createRandom(8, true)
+      return require('./application').default.createRandom(8, true)
     },
   },
 
@@ -32,8 +28,7 @@ const schema = new Schema({
       validate: [
         {
           validator(scope) {
-            var scopes = this.get('scopes')
-            return scopes.length <= 32;
+            return this.get('scopes').length <= 32
           },
           message: '权限数量不能大于 32 个 ({PATH})',
         },
@@ -92,14 +87,14 @@ const schema = new Schema({
     type: Date,
     index: true,
     default() {
-      var date = new Date;
+      let date = new Date
       switch (this.get('type')) {
         case 'code':
           date.setTime(date.getTime() + 1000 * 300)
-          break;
+          break
         case 'refresh':
           date.setTime(date.getTime() + 1000 * 86400 * 60)
-          break;
+          break
         default:
           if (this.get('application')) {
             date.setTime(date.getTime() + 1000 * 86400 * 1)
@@ -107,7 +102,7 @@ const schema = new Schema({
             date.setTime(date.getTime() + 1000 * 86400 * 30)
           }
       }
-      return date;
+      return date
     }
   },
 
@@ -145,121 +140,162 @@ const schema = new Schema({
   ],
 })
 
-schema.virtual('userAgent').get(function() {
-  var logs = this.get('logs')
+schema.virtual('userAgent').get(function () {
+  let logs = this.get('logs')
   if (!logs.length) {
     return
   }
-  return logs[logs.length -1].get('userAgent')
+  return logs[logs.length - 1].get('userAgent')
 })
 
-schema.virtual('ip').get(function() {
-  var logs = this.get('logs')
+schema.virtual('ip').get(function () {
+  let logs = this.get('logs')
   if (!logs.length) {
     return '0.0.0.0'
   }
   return logs[logs.length - 1].get('ip')
 })
 
-schema.virtual('expires_in').get(function() {
-  var time = this.get('expiredAt') - Date.now()
+schema.virtual('expires_in').get(function () {
+  let time = this.get('expiredAt') - Date.now()
   if (time < 1000) {
     return 0
   }
   time = Math.round(time / 1000)
   return time
-});
+})
 
-schema.virtual('token_type').get(function() {
+schema.virtual('token_type').get(function () {
   return 'bearer'
 })
 
-schema.virtual('scope').get(function() {
+schema.virtual('scope').get(function () {
   return this.get('scopes')
 })
 
 
-schema.methods.canScope = function(value) {
-  if (value instanceof Array) {
-    value = value.join('/')
+schema.methods.canScope = async function canScope(
+  token?: {modelName: 'Token'},
+  {
+    path: optPath,
+    client,
+    application: optApplication,
+  }: {
+    path: string | string[],
+    client: boolean,
+    application: boolean,
+  } = {
+    path: '/',
+    client: true,
+    application: true
   }
-  if (!value || value.charAt(0) == '/' || value.indexOf('\\') != -1 || value.indexOf('//') != -1) {
-    return false
+): Promise<void> {
+  let path: string | string[] = optPath
+  if (path instanceof Array) {
+    path = path.join('/')
+  }
+  if (!path || path.charAt(0) === '/' || path.indexOf('\\') !== -1 || path.indexOf('//') !== -1) {
+    this.throw(500, '`path` is incorrect')
   }
 
-  value = value.replace(/\*\*/g, '*/*')
-  var scopes = this.get('scopes')
-  var scope
-  var test
+  path = path.replace(/\*\*/g, '*/*')
+  let scopes = this.get('scopes')
+  let scope
+  let test
   for (let i = 0; i < scopes.length; i++) {
     scope = scopes[i]
-    test = new RegExp('^' + scope.replace(/([.?+$^\[\](){}|\\])/g, '\\$1').replace(/(?:\*\*)/g, '.+').replace(/[*]/g, '[^/\r\n\t]+') + '\/?$').test(value)
+    test = new RegExp('^' + scope.replace(/([.?+$^\[\](){}|\\])/g, '\\$1').replace(/(?:\*\*)/g, '.+').replace(/[*]/g, '[^/\r\n\t]+') + '\/?$').test(path)
     if (test) {
-      return true
+      break
     }
   }
-  return false
+  if (!test) {
+    this.throw(400, '`scope` does not match')
+  }
+
+  if (optApplication && this.get('application')) {
+    let application = this.get('application')
+    if (!application.get) {
+      application = await require('./application').default.findById(application).exec()
+    }
+    await application.canScope(this, {path: optPath, client})
+  }
 }
 
-schema.methods.can = async function(path) {
-  if (!this.canScope(path)) {
-    return false
-  }
-  var application = this.get('application')
-  if (application) {
-    if (!application.get) {
-      application = await Application.findById(application).exec()
-    }
-    if (!application.canScope(path)) {
-      if (!this.get('user') || !this.get('user').equals(application.get('creator')) || this.get('scopes').length != 1 || this.get('scopes')[0] !== '**') {
-        return false
+schema.methods.canUser = async function canUser(token?: {modelName: 'Token'}, {value}: {value: boolean | {modelName: 'User'}}) {
+  let user = this.get('user')
+  if (typeof value === 'boolean') {
+    if (Boolean(user) !== value) {
+      if (value) {
+        this.throw(401, 'Not logged in')
+      } else {
+        this.throw(403, 'You are logged in')
       }
     }
+  } else {
+    if (!user) {
+      this.throw(401, 'Not logged in')
+    } else if (!user.equals(value)) {
+      this.throw(403, 'You do not have permission')
+    }
   }
-  return true
+}
+
+
+schema.methods.canApplication = async function canApplication(token?: {modelName: 'Token'}, {value}: {value: boolean | {modelName: 'Application'}}) {
+  let application = this.get('application')
+  if (typeof value === 'boolean') {
+    if (Boolean(application) !== value) {
+      this.throw(400, 'Token application is incorrect')
+    }
+  } else {
+    if (!application || !application.equals(value)) {
+      this.throw(400, 'Token application is incorrect')
+    }
+  }
 }
 
 
 
-schema.methods.updateLog = function(ctx, server) {
-  var ip
-  var userAgent
+schema.methods.updateLog = function updateLog(ctx, server: boolean = false): boolean {
+  let logIp
+  let userAgent
   if (server) {
-    ip = Application.forwardIp(ctx)
-    if (!ip) {
+    logIp = require('./application').default.forwardIp(ctx)
+    if (!logIp) {
       return false
     }
-    userAgent = Application.forwardUserAgent(ctx, '')
+    userAgent = require('./application').default.forwardUserAgent(ctx, '')
   } else {
-    ip = ctx.ip
+    logIp = ctx.ip
     userAgent = ctx.request.header['user-agent'] || ''
   }
   userAgent = userAgent.trim()
-  if (this.get('ip') == ip) {
+  if (this.get('ip') === ip) {
     return false
   }
-  var logs = this.get('logs')
-  var log = logs.length ? logs[logs.length -1] : {}
-  if (log.ip == ip && (!userAgent || log.userAgent == userAgent) && log.createdAt.getTime() > (Date.now() - 600 * 3600)) {
+  let logs = this.get('logs')
+  let log = logs.length ? logs[logs.length - 1] : {}
+  if (log.ip === ip && (!userAgent || log.userAgent === userAgent) && log.createdAt.getTime() > (Date.now() - 600 * 3600)) {
     return false
   }
 
-  logs.push({ip, userAgent})
+  logs.push({ip: logIp, userAgent})
 
 
   if (logs.length > 5) {
 
     // 一个 ip 最多保存5个副本记录
-    var count = 0
-    for (var i = 5; i < logs.length; i++) {
-      if (logs[i].ip == ip) {
+    let count = 0
+    for (let i = 5; i < logs.length; i++) {
+      if (logs[i].ip === ip) {
         count++
       }
     }
 
     if (count > 5) {
-      for (var i = 5; i < logs.length; i++) {
-        if (logs[i].ip == ip) {
+      for (let i = 5; i < logs.length; i++) {
+        if (logs[i].ip === ip) {
           logs.splice(i, 1)
           break
         }
@@ -286,15 +322,15 @@ schema.set('toJSON', {
     delete ret.logs
 
 
-    var separator = ret.ip.indexOf(':') == -1 ? '.' : ':'
-    var ip = ret.ip.split(separator)
-    if (ip.length <= 4) {
-      ip[ip.length -1] = '*'
+    let separator = ret.ip.indexOf(':') === -1 ? '.' : ':'
+    let retIp = ret.ip.split(separator)
+    if (retIp.length <= 4) {
+      retIp[retIp.length - 1] = '*'
     } else {
-      ip[ip.length -1] = '*'
-      ip[ip.length -2] = '*'
+      retIp[retIp.length - 1] = '*'
+      retIp[retIp.length - 2] = '*'
     }
-    ret.ip = ip.join(separator)
+    ret.ip = retIp.join(separator)
   },
 })
 
@@ -302,12 +338,12 @@ schema.set('toJSON', {
  * 自动添加更新时间
  * @return {[type]} [description]
  */
-schema.pre('save', async function() {
+schema.pre('save', function (next) {
   if (!this.isNew) {
     this.set('updatedAt', new Date)
   }
+  next()
 })
-
 
 
 export default model('Token', schema, {

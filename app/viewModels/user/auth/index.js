@@ -3,7 +3,7 @@ import Router from 'viewModels/router'
 import body from 'viewModels/middlewares/body'
 import rateLimit from 'viewModels/middlewares/rateLimit'
 
-import id from './middlewares/id'
+import authMiddleware from './middlewares/auth'
 
 import list from './list'
 import read from './read'
@@ -62,7 +62,7 @@ const rateLimitVerification = rateLimit({
 
 
 router.get('/', list)
-router.get('/:id', id, read)
+router.get('/:auth', authMiddleware, read)
 
 router.use(body)
 
@@ -70,13 +70,13 @@ router.put(['/', '/save'], rateLimitSave, save)
 router.post(['/', '/save'], rateLimitSave, save)
 router.post('/verification', rateLimitVerification, verification)
 
-router.use(id)
+router.use(authMiddleware)
 
-router.patch('/:id', save)
-router.post('/:id', save)
+router.patch('/:auth', save)
+router.post('/:auth', save)
 
-router.del('/:id', del)
+router.del('/:auth', del)
 
-router.post('/:id/verification', rateLimitVerification, verification)
+router.post('/:auth/verification', rateLimitVerification, verification)
 
 export default router

@@ -1,7 +1,7 @@
 const path              = require('path')
 const webpack           = require('webpack')
 const merge             = require('webpack-merge')
-const ExtractTextPlugin = require("extract-text-webpack-plugin")
+const ExtractTextPlugin = require('extract-text-webpack-plugin')
 const precss            = require('precss')
 const autoprefixer      = require('autoprefixer')
 
@@ -12,20 +12,19 @@ const site              = require('./config/site')
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'production'
 
-const isDev = process.env.NODE_ENV == 'development'
+const isDev = process.env.NODE_ENV === 'development'
 
 
 
-function base(opts) {
-  opts = opts || {}
+function base(opts = {}) {
   const publicPath = site.assets + opts.name + '/'
 
   const extractCSS = new ExtractTextPlugin({
-    filename: "[name].css",
+    filename: '[name].css',
     disable: isDev,
-  });
+  })
 
-  var config = {
+  let config = {
     entry: {
       index: [
         path.join(__dirname, 'app/views/' + opts.name + '/client.js'),
@@ -33,15 +32,15 @@ function base(opts) {
     },
 
     output: {
-      path: path.join(__dirname, 'public/assets/'+ opts.name +'/'),
+      path: path.join(__dirname, 'public/assets/' + opts.name + '/'),
       publicPath,
-      filename: "[name].js",
-      chunkFilename: "[chunkhash:8].[name].chunk.js",
+      filename: '[name].js',
+      chunkFilename: '[chunkhash:8].[name].chunk.js',
     },
 
     devServer: {
       hot: true,
-      contentBase: path.join(__dirname, 'public/assets/' + opts.name+'/'),
+      contentBase: path.join(__dirname, 'public/assets/' + opts.name + '/'),
       noInfo: true,
       publicPath,
       inline: true,
@@ -95,11 +94,11 @@ function base(opts) {
                 loader: 'postcss-loader',
                 options: {
                   sourceMap: true,
-                  plugins: function () {
+                  plugins() {
                     return [
                       precss,
                       autoprefixer
-                    ];
+                    ]
                   }
                 }
               },
@@ -132,11 +131,11 @@ function base(opts) {
                 loader: 'postcss-loader',
                 options: {
                   sourceMap: true,
-                  plugins: function () {
+                  plugins() {
                     return [
                       precss,
                       autoprefixer
-                    ];
+                    ]
                   }
                 }
               },
@@ -165,16 +164,16 @@ function base(opts) {
                 loader: 'postcss-loader',
                 options: {
                   sourceMap: true,
-                  plugins: function () {
+                  plugins() {
                     return [
                       precss,
                       autoprefixer
-                    ];
+                    ]
                   }
                 }
               },
               {
-                loader:'less-loader',
+                loader: 'less-loader',
                 options: {
                   sourceMap: true,
                 }
@@ -197,11 +196,11 @@ function base(opts) {
               {
                 loader: 'postcss-loader',
                 options: {
-                  plugins: function () {
+                  plugins() {
                     return [
                       precss,
                       autoprefixer
-                    ];
+                    ]
                   }
                 }
               }
@@ -242,7 +241,7 @@ function base(opts) {
 
     plugins: [
       extractCSS,
-      new webpack.BannerPlugin("Name: "+packageInfo.name+"\nVersion: "+ packageInfo.version +"\nAuthor: "+ packageInfo.author +"\nDescription: "+ packageInfo.description +""),
+      new webpack.BannerPlugin(`Name: ${packageInfo.name}\nVersion: ${packageInfo.version}\nAuthor: ${packageInfo.author}Description: ${packageInfo.description}`),
       new webpack.DefinePlugin({
         'process.env': {
           NODE_ENV: JSON.stringify(process.env.NODE_ENV),
@@ -273,7 +272,7 @@ function base(opts) {
     config.plugins.push(
       new webpack.optimize.UglifyJsPlugin({
         compress: {
-          warnings : false,
+          warnings: false,
         },
         comments: false,
         mangle: true,
@@ -295,12 +294,12 @@ const ie = merge(base({name: 'ie'}), {
         loader: 'babel-loader',
         options: {
           presets: [
-            "es2015",
-            "stage-0"
+            'es2015',
+            'stage-0'
           ],
           plugins: [
-            "transform-decorators-legacy",
-            "transform-runtime",
+            'transform-decorators-legacy',
+            'transform-runtime',
           ],
           cacheDirectory: isDev
         },
@@ -310,8 +309,7 @@ const ie = merge(base({name: 'ie'}), {
 })
 
 
-/*
-const vue = merge(base({name:'vue'}), {
+const vue = merge(base({name: 'vue'}), {
   resolve: {
     extensions: [
       isDev ? '.dev.vue' : '.prod.vue',
@@ -335,7 +333,7 @@ const vue = merge(base({name:'vue'}), {
               return [
                 precss,
                 autoprefixer
-              ];
+              ]
             }
           },
           cssModules: {
@@ -349,13 +347,13 @@ const vue = merge(base({name:'vue'}), {
                 loader: 'babel-loader',
                 options: {
                   presets: [
-                    "es2015",
-                    "stage-0"
+                    'es2015',
+                    'stage-0'
                   ],
                   plugins: [
-                    "transform-vue-jsx",
-                    "transform-decorators-legacy",
-                    "transform-runtime",
+                    'transform-vue-jsx',
+                    'transform-decorators-legacy',
+                    'transform-runtime',
                   ],
                   cacheDirectory: isDev
                 }
@@ -412,20 +410,20 @@ const vue = merge(base({name:'vue'}), {
             loader: 'babel-loader',
             options: {
               presets: [
-                "es2015",
-                "stage-0"
+                'es2015',
+                'stage-0'
               ],
               plugins: [
-                "transform-vue-jsx",
-                "transform-decorators-legacy",
-                "transform-runtime",
+                'transform-vue-jsx',
+                'transform-decorators-legacy',
+                'transform-runtime',
               ],
               cacheDirectory: isDev
             },
           },
         ],
         exclude: [
-          path.resolve(__dirname, "node_modules"),
+          path.resolve(__dirname, 'node_modules'),
         ],
       },
     ]
@@ -437,9 +435,8 @@ const vue = merge(base({name:'vue'}), {
     }),
   ],
 })
-*/
 
 module.exports = [
   ie,
-  // vue,
+  vue,
 ]

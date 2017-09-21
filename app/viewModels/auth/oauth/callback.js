@@ -9,10 +9,15 @@ export default async function(ctx) {
   const oauth = ctx.state.oauth
   const column = ctx.params.column
 
-  if (ctx.query.state) {
-    oauth.state = ctx.query.state
-  } else if (ctx.query.oauth_token) {
-    oauth.state = ctx.query.oauth_token
+  var params = {
+    ...ctx.request.query,
+    ...ctx.request.body,
+  }
+
+  if (params.state) {
+    oauth.state = params.state
+  } else if (params.oauth_token) {
+    oauth.state = params.oauth_token
   }
 
   var redirectKey = oauth.cacheKey + crypto.createHash('md5').update(oauth.state).digest("base64")
@@ -21,39 +26,22 @@ export default async function(ctx) {
 
 
   if (!redirectUri && ctx.app.env != 'development') {
-    ctx.throw('认证超时', 302, {redirect: '/auth/login?message=oauth_timeout'})
+    ctx.throw('认证超时', 403, {timeout: true})
   }
-
-  var redirectUri = url.parse(redirectUri || '/')
-
-  delete redirectUri.auth
-  redirectUri.hostname = ctx.request.hostname
-  redirectUri.protocol = ctx.request.protocol
-  redirectUri.port = ctx.request.port
-  redirectUri.host = ctx.request.host
-  redirectUri.query = urlObject.query ? querystring.parse(urlObject.query) : {}
-
 
   // 取消认证
   if (!oauth.isAuthorize) {
-    redirectUri.query.message = 'oauth_cancel'
-    redirectUri.query = querystring.stringify(redirectUri.query)
-    redirectUri.search = '?' + redirectUri.query
-    ctx.throw('取消认证', 302, {redirect: url.format(redirectUri)})
+    ctx.throw('取消认证', 403, {cancel: true, redirectUri})
   }
-
-
 
   // 认证
   try {
     var accessToken = await oauth.getAccessToken()
     var userInfo = await oauth.getUserInfo()
   } catch (e) {
+    e.redirectUri = redirectUri
     e.status = e.status || e.code
-    redirectUri.query.message = 'oauth_token'
-    redirectUri.query = querystring.stringify(redirectUri.query)
-    redirectUri.search = '?' + redirectUri.query
-    e.redirect = url.format(redirectUri)
+    e.token = true
     throw e
   }
 
@@ -62,9 +50,8 @@ export default async function(ctx) {
   await token.save()
 
   // 成功重定向
-  redirectUri.query.oauth = column
-  redirectUri.query.message = 'success'
-  redirectUri.query = querystring.stringify(redirectUri.query);
-  redirectUri.search = '?' + redirectUri.query
-  ctx.redirect(url.format(redirectUri))
+  ctx.vmState({
+    userInfo,
+    redirectUri,
+  })
 }

@@ -42,15 +42,14 @@ export default async function(ctx) {
     ip: ctx.ip,
     user,
     token,
-    type: 'auth_password',
+    type: 'user_password',
     to: auth.get('value'),
     toType: auth.get('column') == 'phone' ? 'sms' : auth.get('column'),
     nickname: user.get('nickname') || user.get('username'),
-    used: '找回密码',
+    used: '修改密码',
   })
 
-  await verification.save();
-
+  await verification.save()
 
   ctx.vmState(verification)
 }

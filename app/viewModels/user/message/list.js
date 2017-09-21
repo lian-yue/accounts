@@ -61,6 +61,11 @@ export default async function (ctx) {
     }
   }
 
+  if (typeof params.type == 'string') {
+    let types = params.type.split(',').map(type => type.trim())
+    query.type = params.typeNin ? {$nin: types} : {$ni: types}
+  }
+
 
   query.deletedAt = {$exists: tokenUser.get('admin') && params.deleted ? true : false}
 

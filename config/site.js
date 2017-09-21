@@ -5,5 +5,5 @@ module.exports = {
   description: '恋月 的小站',
   author: 'LianYue',
   email: 'admin@lianyue.org',
-  assets:  process.env.NODE_ENV == 'development' ? 'http://localhost:3000/assets/' : '/assets/',
+  assets: process.env.NODE_ENV === 'development' ? 'http://localhost:3000/assets/' : '/assets/',
 }

@@ -71,7 +71,7 @@ export default function(opt) {
       if (applicationId && authorization[0] !== applicationId) {
         ctx.throw(`authorization "id" does not match`, 400, {code:'invalid_request'})
       }
-      if (applicationSecret && authorization[1] !== applicationSecret && authorization[1] !== undefined) {
+      if (applicationSecret && authorization[1] !== applicationSecret && authorization[1] !== void 0) {
         ctx.throw(`authorization "secret" does not match`, 400, {code:'invalid_request'})
       }
 

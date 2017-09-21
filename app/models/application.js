@@ -1,3 +1,4 @@
+/* @flow */
 import {Schema, Types} from 'mongoose'
 
 import ip from 'ip'
@@ -6,6 +7,7 @@ import reserve from 'config/reserve'
 
 import model from './model'
 
+import Token from './token'
 
 // 应用
 const schema = new Schema({
@@ -15,7 +17,7 @@ const schema = new Schema({
     type: String,
     required: true,
     default() {
-      return Application.createRandom(32)
+      return this.constructor.createRandom(32)
     },
   },
 
@@ -46,7 +48,7 @@ const schema = new Schema({
     maxlength: [32, 'Slug can not be greater than 32 bytes ({PATH})'],
     match: [/^[0-9a-z_-]+$/, 'Slug only allows the use of English, numbers and _- ({PATH})'],
     default() {
-      return Application.createRandom(32)
+      return this.constructor.createRandom(32)
     },
     validate: [
       {
@@ -56,7 +58,9 @@ const schema = new Schema({
       {
         validator(slug) {
           try {
+            /* eslint-disable */
             new Types.ObjectId(slug)
+            /* eslint-enable */
           } catch (e) {
             return true
           }
@@ -65,13 +69,13 @@ const schema = new Schema({
         message: 'Slug can not be ID ({PATH})',
       },
       {
-        async validator(slug, cb) {
+        isAsync: true,
+        async validator(slug) {
           if (this.get('deletedAt')) {
-            cb(true);
-            return;
+            return true
           }
-          var application = await Application.findOne({slug}).read('primary').exec();
-          cb(!application || this.equals(application))
+          let application = await this.constructor.findOne({slug}).read('primary').exec()
+          return !application || this.equals(application)
         },
         message: 'Slug already exists ({PATH})',
       },
@@ -108,17 +112,16 @@ const schema = new Schema({
   },
 
 
-  // 已获取的权限
+  // 已开启的权限
   scopes: [
     {
       type: String,
-      index: true,
       required: [true, 'Scope name can not be empty ({PATH})'],
       maxlength: [64, 'Scope name can not be longer than 64 bytes ({PATH})'],
       validate: [
         {
           validator(scope) {
-            return this.get('scopes').length <= 32;
+            return this.get('scopes').length <= 32
           },
           message: '权限数量不能大于 32 个 ({PATH})',
         },
@@ -155,24 +158,23 @@ const schema = new Schema({
     {
       type: String,
       required: [true, '请求源不能为空 ({PATH})'],
-      maxlength: [255, '请求源长度不能大于 64 字节 ({PATH})'],
+      maxlength: [64, '请求源长度不能大于 64 字节 ({PATH})'],
       trim: true,
       validate: [
         {
           validator(requestOrigin) {
-            var requestOrigins = this.get('requestOrigins')
-            return requestOrigins.length <= 16;
+            return this.get('requestOrigins').length <= 8
           },
-          message: '请求源数量不能大于 16 个 ({PATH})',
+          message: '请求源数量不能大于 8 个 ({PATH})',
         },
         {
           validator(requestOrigin) {
-            var matches = requestOrigin.match(/^(\w+)\:\/+[0-9a-z]/)
+            let matches = requestOrigin.match(/^(\w+)\:\/+[0-9a-z]/)
             if (!matches) {
               return false
             }
-            var protocol = matches[1].toLocaleLowerCase()
-            return protocol.indexOf('java') == -1 && protocol.indexOf('mail') == -1 && protocol.indexOf('file') == -1 && protocol.indexOf('ftp') == -1 && protocol.indexOf('data') == -1
+            let protocol = matches[1].toLocaleLowerCase()
+            return protocol.indexOf('java') === -1 && protocol.indexOf('mail') === -1 && protocol.indexOf('file') === -1 && protocol.indexOf('ftp') === -1 && protocol.indexOf('data') === -1
           },
           message: '"{VALUE}" 不是 URL 地址 ({PATH})',
         },
@@ -189,19 +191,18 @@ const schema = new Schema({
       validate: [
         {
           validator(redirectUri) {
-            var redirectUris = this.get('redirectUris')
-            return redirectUris.length <= 16;
+            return this.get('redirectUris').length <= 8
           },
-          message: '重定向地址数量不能大于 16 个 ({PATH})',
+          message: '重定向地址数量不能大于 8 个 ({PATH})',
         },
         {
           validator(redirectUri) {
-            var matches = redirectUri.match(/^(\w+)\:\/+[0-9a-z]/)
+            let matches = redirectUri.match(/^(\w+)\:\/+[0-9a-z]/)
             if (!matches) {
               return false
             }
-            var protocol = matches[1].toLocaleLowerCase()
-            return protocol.indexOf('java') == -1 && protocol.indexOf('mail') == -1 && protocol.indexOf('file') == -1 && protocol.indexOf('ftp') == -1 && protocol.indexOf('data') == -1
+            let protocol = matches[1].toLocaleLowerCase()
+            return protocol.indexOf('java') === -1 && protocol.indexOf('mail') === -1 && protocol.indexOf('file') === -1 && protocol.indexOf('ftp') === -1 && protocol.indexOf('data') === -1
           },
           message: '"{VALUE}" 不是 URL 地址 ({PATH})',
         },
@@ -221,32 +222,37 @@ const schema = new Schema({
       validate: [
         {
           validator(allowedIp) {
-            var index = allowedIp.indexOf('/')
-            if (index == -1) {
+            let index = allowedIp.indexOf('/')
+            if (index === -1) {
               return ip.isV4Format(allowedIp) || ip.isV6Format(allowedIp)
             }
-            var value = allowedIp.substr(0, index)
+            let value = allowedIp.substr(0, index)
 
             if (!ip.isV4Format(value) && !ip.isV6Format(value)) {
               return false
             }
 
-            var cidr = parseInt(allowedIp.substr(index))
-            var maxCidr = value.indexOf(':') == -1 ? 32 : 128
+            let cidr = parseInt(allowedIp.substr(index), 10)
+            let maxCidr = value.indexOf(':') === -1 ? 32 : 128
             return cidr <= maxCidr && cidr >= 1
           },
           message: '允许 IP 段 "{VALUE}" 格式不正确 ({PATH})',
         },
         {
           validator(allowedIp) {
-            var allowedIps = this.get('allowedIps')
-            return allowedIps.length <= 32;
+            return this.get('allowedIps').length <= 32
           },
           message: '允许 IP 段数量不能大于 32 个 ({PATH})',
         },
       ],
     }
   ],
+
+  reason: {
+    type: String,
+    trim: true,
+    maxlength: [255, '理由不能大于 255 字节 ({PATH})'],
+  },
 
   creator: {
     type: Schema.Types.ObjectId,
@@ -271,170 +277,204 @@ const schema = new Schema({
     type: Date,
     index: true,
   },
-});
+})
 
 
 
-
-schema.methods.canScope = function(value) {
-  if (value instanceof Array) {
-    value = value.join('/')
+schema.methods.canScope = async function canScope(token?: Token, {path: optPath, client}: {path: string | string[], client: boolean} = {path: '/', client: true}) {
+  let path: string | string[] = optPath
+  if (path instanceof Array) {
+    path = path.join('/')
   }
-  if (!value || value.charAt(0) == '/' || value.indexOf('\\') != -1 || value.indexOf('//') != -1) {
-    return false
+  if (!path || path.charAt(0) === '/' || path.indexOf('\\') !== -1 || path.indexOf('//') !== -1) {
+    this.throw(500, '`path` is incorrect')
   }
-  if (scopes.indexOf(value) != -1) {
-    return true
+
+  if (client && token && token.get('user') && token.get('user').equals(this.get('creator')) && token.get('scopes').length === 1 && token.get('scopes')[0] === '**') {
+    return
   }
-  value = value.replace(/\*\*/g, '*/*')
-  var scopes = this.get('scopes')
-  var scope
-  var test
+
+  path = path.replace(/\*\*/g, '*/*')
+  let scopes = this.get('scopes')
+  let scope
+  let test
   for (let i = 0; i < scopes.length; i++) {
     scope = scopes[i]
-    test = new RegExp('^' + scope.replace(/([.?+$^\[\](){}|\\])/g, '\\$1').replace(/(?:\*\*)/g, '.+').replace(/[*]/g, '[^/\r\n\t]+') + '\/?$').test(value)
+    test = new RegExp('^' + scope.replace(/([.?+$^\[\](){}|\\])/g, '\\$1').replace(/(?:\*\*)/g, '.+').replace(/[*]/g, '[^/\r\n\t]+') + '\/?$').test(path)
     if (test) {
-      return true
+      break
     }
   }
-  return value
-}
-
-schema.methods.can = async function(method) {
-  var token = this.getToken()
-  var tokenUser = token ? token.get('user') : void 0
-  switch (method) {
-    case 'list':
-      if (!tokenUser) {
-        return false
-      }
-      if (!tokenUser.equals(this.get('user')) && (!tokenUser.get('admin') || tokenUser.get('black'))) {
-        return false
-      }
-      return await token.can('application/list')
-      break
-    case 'read':
-      if (this.get('deletedAt') && (!tokenUser || !tokenUser.get('admin') || tokenUser.get('black'))) {
-        return false
-      }
-
-      if (this.get('status') == 'block') {
-        if (!tokenUser) {
-          return false
-        }
-        if (!tokenUser.equals(this.get('creator'))) {
-          if (!tokenUser.get('admin') || tokenUser.get('black')) {
-            return false
-          }
-        }
-      }
-      return await token.can('application/read')
-      break;
-    case 'save':
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('black')) {
-        return false
-      }
-      if (this.get('deletedAt')) {
-        return false
-      }
-      if (!tokenUser.equals(this.get('creator')) && !tokenUser.get('admin')) {
-        return false
-      }
-      return await token.can('application/save')
-      break;
-    case 'status':
-      if (this.get('deletedAt')) {
-        return false
-      }
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('black')) {
-        return false
-      }
-      if (!tokenUser.get('admin')) {
-        return false
-      }
-      return await token.can('application/status')
-      break;
-    case 'delete':
-      if (this.get('deletedAt')) {
-        return false
-      }
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('black')) {
-        return false
-      }
-      if (!tokenUser.get('admin')) {
-        return false
-      }
-      return await token.can('application/delete')
-      break;
-    case 'restore':
-      if (!this.get('deletedAt')) {
-        return false
-      }
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('black')) {
-        return false
-      }
-      if (!tokenUser.get('admin')) {
-        return false
-      }
-      return await token.can('application/restore')
-      break;
-    case 'scope':
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('block')) {
-        return false
-      }
-      if (!tokenUser.get('admin')) {
-        return false
-      }
-      return true
-      break;
-    case 'auths_password':
-    case 'auths_implicit':
-    case 'auths_cors':
-      if (!tokenUser) {
-        return false
-      }
-      if (tokenUser.get('block')) {
-        return false
-      }
-      if (tokenUser.get('admin')) {
-        return true
-      }
-      if (token.get('auths')[method.substr(6)]) {
-        return true
-      }
-      return false
-      break;
-    default:
-      return false
+  if (!test) {
+    this.throw(400, '`scope` does not match')
   }
 }
 
-schema.methods.allowedIp = function(value) {
-  var allowedIps = this.get('allowedIps')
-  if (allowedIps.length == 0) {
+
+schema.methods.canNotDelete = async function canNotDelete(token?: Token) {
+  if (this.get('deletedAt')) {
+    this.throw(404, 'Application does not exist')
+  }
+}
+
+
+schema.methods.canNotBlock = async function canNotBlock(token?: Token) {
+  if (this.get('status') === 'block') {
+    this.throw(403, 'The application is blacklisted')
+  }
+}
+
+schema.methods.canList = async function canList(token?: Token) {
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+  await token.canUser(token, {value: true})
+  await token.canScope(token, {path: 'application/list'})
+
+  let tokenUser = token.get('user')
+
+  if (!tokenUser.equals(this.get('creator')) || this.get('deletedAt')) {
+    await token.canScope(token, {path: 'admin'})
+    await tokenUser.canNotBlock(token)
+    await tokenUser.canHasAdmin(token)
+  }
+}
+
+
+schema.methods.canRead = async function canRead(token?: Token) {
+  // 正常状态 所有人可读
+  if (!this.get('deletedAt') && this.get('status') !== 'block') {
+    return
+  }
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+
+  // token 的 application 不是和 application 相同需要
+  if (!this.equals(token.get('application'))) {
+    await token.canScope(token, {path: 'application/read'})
+  }
+  await token.canUser(token, {value: true})
+
+  let tokenUser = token.get('user')
+  if (!tokenUser.equals(this.get('creator'))) {
+    await token.canScope(token, {path: 'admin'})
+  }
+
+  if (!tokenUser.get('admin')) {
+    await this.canNotDelete()
+  }
+
+  if (!tokenUser.equals(this.get('creator'))) {
+    await tokenUser.canNotBlock(token)
+    await tokenUser.canHasAdmin(token)
+  }
+}
+
+schema.methods.canSave = async function canSave(token?: Token, {
+  auths,
+  scope
+}: {
+  auths: {
+    password?: boolean,
+    implicit?: boolean,
+    cors?: boolean
+  },
+  scope?: string | string[],
+}) {
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+  await token.canUser(token, {value: true})
+  await token.canScope(token, {path: 'application/save'})
+  let tokenUser = token.get('user')
+  if (!tokenUser.equals(this.get('creator'))) {
+    await token.canScope(token, {path: 'admin'})
+  }
+
+  if ((this.isMounted('auths.password') && this.get('auths').password) || (auths.password && !this.get('auths').password)) {
+    await tokenUser.canHasAdmin(token)
+  }
+
+  if ((this.isMounted('auths.implicit') && this.get('auths').implicit) || (auths.implicit && !this.get('auths').implicit)) {
+    await tokenUser.canHasAdmin(token)
+  }
+
+  if ((this.isMounted('auths.cors') && this.get('auths').cors) || (auths.cors && !this.get('auths').cors)) {
+    await tokenUser.canHasAdmin(token)
+  }
+
+  if (scope !== undefined) {
+    try {
+      await this.canScope(token, {path: scope, client: false})
+    } catch (e) {
+      await tokenUser.canHasAdmin(token)
+    }
+  }
+
+  await tokenUser.canNotBlock(token)
+  if (!tokenUser.equals(this.get('creator')) || this.get('deletedAt') || this.get('status') === 'block') {
+    await tokenUser.canHasAdmin(token)
+  }
+}
+
+
+schema.methods.canStatus = async function canStatus(token?: Token) {
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+  await token.canUser(token, {value: true})
+  await token.canScope(token, {path: 'application/status'})
+  await token.canScope(token, {path: 'admin'})
+  let tokenUser = token.get('user')
+  await tokenUser.canNotBlock(token)
+  await tokenUser.canHasAdmin(token)
+}
+
+schema.methods.canDelete = async function canDelete(token?: Token) {
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+  await token.canUser(token, {value: true})
+  await token.canScope(token, {path: 'application/delete'})
+  let tokenUser = token.get('user')
+  if (!tokenUser.equals(this.get('creator'))) {
+    await token.canScope(token, {path: 'admin'})
+  }
+  await this.canNotDelete(token)
+
+  await tokenUser.canNotBlock(token)
+  if (!tokenUser.equals(this.get('creator'))) {
+    await tokenUser.canHasAdmin(token)
+  }
+}
+
+schema.methods.canRestore = async function canRestore(token?: Token) {
+  if (!token) {
+    return this.throwTokenNotExists()
+  }
+  await token.canUser(token, {value: true})
+  await token.canScope(token, {path: 'application/delete'})
+  await token.canScope(token, {path: 'admin'})
+  let tokenUser = token.get('user')
+  await tokenUser.canNotBlock(token)
+  await tokenUser.canHasAdmin(token)
+  if (!this.get('deletedAt')) {
+    this.throw(403, 'The application has not been deleted')
+  }
+}
+
+
+schema.methods.allowedIp = function allowedIp(value: string): boolean {
+  let allowedIps = this.get('allowedIps')
+  if (allowedIps.length === 0) {
     return true
   }
-  var allowedIp
-  for (var i = 0; i < allowedIps.length; i++) {
-    allowedIp = allowedIps[i]
-    if (allowedIp.indexOf('/') == -1) {
+  for (let i = 0; i < allowedIps.length; i++) {
+    let value1 = allowedIps[i]
+    if (value1.indexOf('/') === -1) {
       return ip.isEqual(value)
-    } else if (ip.cidrSubnet(allowedIp).contains(value)) {
+    } else if (ip.cidrSubnet(value1).contains(value)) {
       return true
     }
   }
@@ -443,8 +483,8 @@ schema.methods.allowedIp = function(value) {
 
 
 
-schema.statics.forwardIp = function(ctx, def) {
-  var value = ctx.query.ip || ctx.query.x_ip
+schema.statics.forwardIp = function forwardIp(ctx: Object, def?: string): void | string {
+  let value = ctx.query.ip || ctx.query.x_ip
   if (ctx.request.header['x-ip']) {
     value = ctx.request.header['x-ip']
   } else if (ctx.request.body instanceof Object && ctx.request.body.ip) {
@@ -458,27 +498,30 @@ schema.statics.forwardIp = function(ctx, def) {
   return value
 }
 
-schema.statics.forwardUserAgent = function(ctx, def) {
-  userAgent = ctx.query.user_agent || ctx.query.x_user_agent
+schema.statics.forwardUserAgent = function forwardUserAgent(ctx: Object, def?: string): void | string {
+  let userAgent = ctx.query.user_agent || ctx.query.x_user_agent
   if (ctx.request.header['x-user-agent']) {
     userAgent = ctx.request.header['x-user-agent']
   } else if (ctx.request.body instanceof Object && ctx.request.body.user_agent) {
     userAgent = ctx.request.body.user_agent
   } else if (ctx.request.body.fields instanceof Object && ctx.request.body.fields.user_agent) {
     userAgent = ctx.request.body.fields.user_agent
-  } else if (!userAgent) {
+  } else if (userAgent) {
     userAgent = def
   }
-  return userAgent
+  if (userAgent === undefined) {
+    return undefined
+  }
+  return String(userAgent)
 }
 
 
-schema.statics.createRandom = function(length, lower) {
+schema.statics.createRandom = function createRandom(length: number = 32, lower: boolean = false) {
   const string = lower ? '0123456789abcdefghijklmnopqrstuvwxyz' : '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
 
-  var secret = ''
-  for (var i = 0; i < length; i++) {
-    secret += string.substr(Math.round(Math.random() * (string.length-1)), 1)
+  let secret = ''
+  for (let i = 0; i < length; i++) {
+    secret += string.substr(Math.round(Math.random() * (string.length - 1)), 1)
   }
   return secret
 }
@@ -486,23 +529,20 @@ schema.statics.createRandom = function(length, lower) {
 
 
 
-
 schema.set('toJSON', {
   virtuals: true,
   transform(doc, ret) {
-    var tokenUser = doc.getToken() ? doc.getToken().get('user') : void 0
+    let tokenUser = doc.getToken() ? doc.getToken().get('user') : undefined
     if (!tokenUser || (!tokenUser.get('admin') && !tokenUser.equals(doc.get('creator')))) {
       delete ret.secret
+      delete ret.reason
       delete ret.auths
       delete ret.pushUrl
-      delete ret.requestOrigins
-      delete ret.redirectUris
       delete ret.allowedIps
     }
   },
-});
+})
 
 
 
-const Application = model('Application', schema);
-export default Application
+export default model('Application', schema)

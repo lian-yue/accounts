@@ -61,7 +61,7 @@ export default async function (ctx) {
       var message = new Message({
         user,
         readOnly: true,
-        type: 'auth_login',
+        type: 'user_login',
         column,
         error: true,
         token,
@@ -91,7 +91,7 @@ export default async function (ctx) {
   var message = new Message({
     user,
     readOnly: true,
-    type: 'auth_login',
+    type: 'user_login',
     column,
     token,
   })

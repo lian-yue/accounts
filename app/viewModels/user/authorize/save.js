@@ -27,17 +27,16 @@ export default async function (ctx) {
   }
 
   if (params.roles !== void 0 && params.roles !== null) {
+    let roles = []
     if (typeof params.roles == 'string') {
       try {
-        params.roles = JSON.parse(params.roles)
+        roles = JSON.parse(params.roles)
       } catch (e) {
         e.status = 403
         throw e
       }
-    }
-
-    if (!(params.roles instanceof Array)) {
-      ctx.throw('"roles" is not an array', 403)
+    } else if (params.roles instanceof Array) {
+      roles = params.roles
     }
 
     if (roles.length > 32) {
@@ -50,13 +49,13 @@ export default async function (ctx) {
       oldMaps[role.role] = role
     }
 
-    var roles = []
-    for (let i = 0; i < params.roles.length; i++) {
-      let role = params.roles[i]
+    let newRoles = []
+    for (let i = 0; i < roles.length; i++) {
+      let role = roles[i]
       if (!role.role) {
         continue
       }
-      let id = String(obj.role._id || obj.role.id obj.role || '')
+      let id = String(obj.role._id || obj.role.id || obj.role || '')
       let name = obj.role.name || id
       if (!id) {
         continue
@@ -93,9 +92,9 @@ export default async function (ctx) {
       if (old) {
         role = {...old, ...role}
       }
-      roles.push(role)
+      newRoles.push(role)
     }
-    authorize.set('roles', roles)
+    authorize.set('roles', newRoles)
   }
   await authorize.save()
 

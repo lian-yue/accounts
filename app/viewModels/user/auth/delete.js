@@ -65,6 +65,7 @@ export default async function (ctx) {
     application: token.get('application'),
     type: 'auth_delete',
     readOnly: true,
+    auth: auth.get('_id'),
     display: auth.get('display'),
     token,
   })

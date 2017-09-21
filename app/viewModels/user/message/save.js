@@ -11,6 +11,7 @@ export default async function (ctx) {
   delete params.createdAt
   delete params.deletedAt
 
+  delete params.application
   delete params.userAgent
   delete params.ip
 
@@ -26,7 +27,6 @@ export default async function (ctx) {
   var message = new Message({
     ...params,
     user,
-    application: token.get('application'),
     creator: tokenUser,
     readAt: params.readAt ? new Date : void 0,
     token,

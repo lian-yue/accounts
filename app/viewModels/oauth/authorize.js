@@ -45,7 +45,7 @@ export default async function (ctx) {
     application,
     readOnly: true,
     oauth: true,
-    type: 'auth_login',
+    type: 'user_login',
     token,
   })
   await message.save()

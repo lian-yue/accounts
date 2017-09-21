@@ -46,6 +46,16 @@ export default async function (ctx) {
     query.status = {$in: ['release', 'pending']}
   }
 
+  if (params.search) {
+    let search = String(params.search).replace(/[\u0000-\u002f\u003a-\u0040\u005b-\u0060\u007b-\u007f]+/g, ' ').split(' ').filter(value => !!value);
+    if (search.length) {
+      query.$and = query.$and || []
+      for (let value of search) {
+        query.$and.push({name:{$regex: value, $options:'i'}})
+      }
+    }
+  }
+
   var results = await Application.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).populate(User.refPopulate('creator')).exec()
 
   var more = results.length > options.limit

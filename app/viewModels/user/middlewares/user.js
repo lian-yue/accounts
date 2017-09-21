@@ -7,14 +7,14 @@ const accessToken = tokenMiddleware({
 })
 
 export default async function (ctx, next) {
-  if (ctx.params.username) {
-    if (ctx.params.username == 'me') {
+  if (ctx.params.user) {
+    if (ctx.params.user == 'me') {
       if (!ctx.state.token) {
         await accessToken(ctx)
       }
       ctx.state.user = ctx.state.token.get('user')
     } else {
-      ctx.state.user = await User.findByAuth(ctx.params.username, ['username', 'id'])
+      ctx.state.user = await User.findByAuth(ctx.params.user, ['username', 'id'])
     }
     if (!ctx.state.user) {
       ctx.throw('用户不存在', 404)

@@ -34,6 +34,15 @@ export default async function (ctx) {
   if (params.username) {
     query.username = String(params.username).trim()
   }
+
+  if (params.admin) {
+    query.admin = true
+  }
+
+  if (params.black) {
+    query.black = true
+  }
+
   var results = User.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).populate(User.metaPopulate())
   if (tokenUser.get('admin')) {
     results = results.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({path: 'application', select: {name: 1, slug: 1, content: 1}})

@@ -144,7 +144,7 @@ export default async function(ctx) {
   if (authEmail && ctx.app.env != 'development') {
     let verification  = await Verification.findByCode({
       token,
-      type: 'auth_create',
+      type: 'user_save',
       code: emailCode,
       to: authEmail.get('value'),
       toType: 'email',
@@ -157,7 +157,7 @@ export default async function(ctx) {
   if (authPhone && ctx.app.env != 'development') {
     let verification  = await Verification.findByCode({
       token,
-      type: 'auth_create',
+      type: 'user_save',
       code: phoneCode,
       to: authPhone.get('value'),
       toType: 'sms',
@@ -200,6 +200,7 @@ export default async function(ctx) {
     user,
     readOnly: true,
     type: 'user_save',
+    create: true,
     column: column || void 0,
     token,
   })
@@ -208,7 +209,7 @@ export default async function(ctx) {
   var message = new Message({
     user,
     readOnly: true,
-    type: 'auth_login',
+    type: 'user_login',
     column: column || void 0,
     token,
   })

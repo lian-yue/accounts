@@ -1,23 +1,21 @@
 #!/usr/bin/env node
-process.env.NODE_ENV = process.env.NODE_ENV || 'production';
-if (process.env.NODE_ENV == 'development' && !process.env.DEBUG) {
-  process.env.DEBUG = '*,-babel,-koa-send,-mquery';
+process.env.NODE_ENV = process.env.NODE_ENV || 'production'
+if (process.env.NODE_ENV === 'development' && !process.env.DEBUG) {
+  process.env.DEBUG = '*,-babel,-koa-send,-mquery,-eslint:*'
 }
 
-const debug = require('debug')('server');
-const http  = require('http');
-const port  = normalizePort(process.env.PORT || '3000');
-const host  = process.env.HOST || '0.0.0.0'
+const debug = require('debug')('server')
+const http  = require('http')
 
 
-var server
-if (process.env.NODE_ENV == 'development') {
+
+if (process.env.NODE_ENV === 'development') {
   const webpack = require('webpack')
-
-
   const configs = require('../webpack.config.server')
+
+  let isServer = false
   let key = 0
-  function watch() {
+  let watch = function watch() {
     let config = configs[key]
     let compiler = webpack(config)
     key++
@@ -29,106 +27,106 @@ if (process.env.NODE_ENV == 'development') {
       if (err) {
         throw err
       }
-      stats = stats.toJson()
-      stats.errors.forEach(err => console.error(err))
-      stats.warnings.forEach(err => console.warn(err))
+      let data = stats.toJson()
+      data.errors.forEach(err => console.error(err))
+      data.warnings.forEach(err => console.warn(err))
+
+
       if (configs[key]) {
         watch()
-      } else {
-        if (!server) {
-          server = app()
-        }
+      } else if (!isServer) {
+        isServer = true
+        createServer()
       }
     })
   }
 
   watch()
 } else {
-  server = app()
+  createServer()
 }
 
 
 
 
-function app() {
-  if (process.env.NODE_ENV == 'development') {
-    var app = require('../dev').default()
-    /*
-    let koaWebpack = require('koa-webpack');
-    let configs = require('../webpack.config.client');
-    configs.forEach(function(config) {
-      app.middleware.unshift(koaWebpack({
-        config,
-        dev: {
-          noInfo: true,
-        },
-        hot: {
-          noInfo: true,
-        },
-      }))
-    })*/
+function createServer() {
+  const port  = normalizePort(process.env.PORT || '3000')
+  const host  = process.env.HOST || '0.0.0.0'
+  let app
+  if (process.env.NODE_ENV === 'development') {
+    app = require('../dev').default
+    // let koaWebpack = require('koa-webpack')
+    // let configs = require('../webpack.config.client')
+    // configs.forEach(function (config) {
+    //   app.middleware.unshift(koaWebpack({
+    //     config,
+    //     dev: {
+    //       noInfo: true,
+    //     },
+    //     hot: {
+    //       noInfo: true,
+    //     },
+    //   }))
+    // })
   } else {
-    var app = require('../dist').default()
+    app = require('../dist').default
   }
 
   // proxy
   app.proxy = true
 
-  var server = http.createServer(app.callback());
+  let server = http.createServer(app.callback())
 
-  server.listen(port, host);
-  server.on('error', onError);
-  server.on('listening', onListening);
+  server.listen(port, host)
+  server.on('error', function (error) {
+    if (error.syscall !== 'listen') {
+      throw error
+    }
+
+    let bind = typeof port === 'string'
+      ? 'Pipe ' + port
+      : 'Port ' + port
+
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+      case 'EACCES':
+        console.error(bind + ' requires elevated privileges')
+        process.exit(1)
+        break
+      case 'EADDRINUSE':
+        console.error(bind + ' is already in use')
+        process.exit(1)
+        break
+      default:
+        throw error
+    }
+  })
+
+
+  server.on('listening', function () {
+    let addr = server.address()
+    let bind = typeof addr === 'string'
+      ? 'pipe ' + addr
+      : 'port ' + addr.port
+    debug('Listening on ' + bind)
+  })
 
   return server
 }
 
 
 
-function normalizePort(val) {
-  var port = parseInt(val, 10);
+function normalizePort(value) {
+  let portInt = parseInt(value, 10)
 
-  if (isNaN(port)) {
+  if (isNaN(portInt)) {
     // named pipe
-    return val;
+    return value
   }
 
-  if (port >= 0) {
+  if (portInt >= 0) {
     // port number
-    return port;
+    return portInt
   }
-
-  return false;
-}
-
-function onError(error) {
-  if (error.syscall !== 'listen') {
-    throw error;
-  }
-
-  var bind = typeof port === 'string'
-    ? 'Pipe ' + port
-    : 'Port ' + port;
-
-  // handle specific listen errors with friendly messages
-  switch (error.code) {
-    case 'EACCES':
-      console.error(bind + ' requires elevated privileges');
-      process.exit(1);
-      break;
-    case 'EADDRINUSE':
-      console.error(bind + ' is already in use');
-      process.exit(1);
-      break;
-    default:
-      throw error;
-  }
-}
-
-function onListening() {
-  var addr = server.address();
-  var bind = typeof addr === 'string'
-    ? 'pipe ' + addr
-    : 'port ' + addr.port;
-  debug('Listening on ' + bind);
+  return false
 }

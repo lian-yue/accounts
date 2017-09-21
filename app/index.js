@@ -1,8 +1,10 @@
+/* @flow */
 import path        from 'path'
-import http        from 'http'
-import assert      from 'assert'
 import Koa         from 'koa'
 import koaStatic   from 'koa-static'
+import statuses    from 'statuses'
+import httpErrors  from 'http-errors'
+
 import moment      from 'moment'
 
 import 'source-map-support/register'
@@ -11,243 +13,237 @@ import packageInfo from 'package'
 
 global.__SERVER__ = true
 
-var models = require('models').default
-var viewModels = require('viewModels').default
+/* eslint-disable */
+let models = require('models')
+/* eslint-enable */
+let viewModels = require('viewModels').default
 
 if (module.hot) {
-  module.hot.accept(['models', 'viewModels'], function() {
-    models = require('models').default
+  module.hot.accept(['models', 'viewModels'], function (): void {
+    models = require('models')
     viewModels = require('viewModels').default
   })
 }
 
 
-// Add http 451
-http.STATUS_CODES[451] = 'Unavailable For Legal Reasons'
+const app = new Koa
 
-export default function() {
-
-  const app = new Koa()
-
-  app.env = process.env.NODE_ENV || 'production'
-
-  // error
-  app.context.onerror = function(err, ret) {
-    if (null === err) {
-      return;
-    }
-
-    assert(err instanceof Error, 'non-error thrown: ' + err);
-    const ctx = this;
-
-    // ENOENT support
-    if ('ENOENT' === err.code) {
-      err.status = 404;
-    }
-
-    if (err.status == 400 && err.statusCode > 400 && err.statusCode < 500) {
-      err.status = err.status;
-    }
-
-    if ((err.code == 'HPE_INVALID_EOF_STATE' || err.code == 'ECONNRESET' || err.message == 'Request aborted') && !err.status) {
-      err.status = 408;
-    }
-
-    if (err.name == 'ValidationError' || err.name == 'ValidatorError') {
-      err.status = err.status || 403;
-      err.code = err.name;
-    }
-
-    if (err.code == 'ValidationError' || err.code == 'ValidatorError') {
-      err.status = err.status || 403;
-    }
-
-    if ('number' !== typeof err.status || !http.STATUS_CODES[err.status]) {
-      err.status = 500;
-    }
-
-    if (!ctx.status || ctx.status < 300 || ctx.status == 404 || err.status >= 500) {
-      ctx.status = err.status;
+app.env = process.env.NODE_ENV || 'production'
+app.context.onerror = function onerror(e: mixed): void {
+  let err = e
+  if (!err) {
+    return
+  } else if (typeof err === 'number') {
+    err = httpErrors(err)
+  } else if (err instanceof httpErrors) {
+    // has httpErrors
+  } else if (typeof err === 'object') {
+    let status: number
+    let message: string
+    if (typeof err.status === 'number' && err.status >= 400 && err.status < 600) {
+      status = err.status
+    } else if (typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600) {
+      status = err.statusCode
+    } else if (err.code === 'ENOENT') {
+      // ENOENT support
+      status = 404
+    } else if (err.code === 'HPE_INVALID_EOF_STATE' || err.code === 'ECONNRESET' || err.message === 'Request aborted') {
+      status = 408
+    } else if (err.name === 'ValidationError' || err.name === 'ValidatorError' || err.code === 'ValidationError' || err.code === 'ValidatorError') {
+      status = 403
+    } else if (this.status >= 400) {
+      status = this.status
     } else {
-      err.status = ctx.status
+      status = 500
     }
-
-    ctx.app.emit('error', err, ctx);
-
-    if (err.status == 408) {
-      return;
-    }
-
-    if (ctx.headerSent || !ctx.writable) {
-      err.headerSent = true;
-      return;
-    }
-
-    if ((err.status == 500 && app.env != 'development') || !err.message) {
-      err.message = http.STATUS_CODES[err.status]
-    }
-
-    if (err.headers) {
-      ctx.set(err.headers)
-      delete err.headers
-    }
-
-    var messages = [];
-    if (err.name == 'ValidationError' && err.errors) {
-      for (let path in err.errors) {
-        let message = err.errors[path];
-        messages.push({
-          code: message.code || message.name,
-          path: message.path || path,
-          message: message.message,
-          ...message,
-        });
-      }
-      delete err.errors
-    } else {
-      messages.push({
-        message: err.message,
-        ...err,
-      });
-    }
-    err.messages = messages
-
-    if (!ret) {
-      ctx.type = 'json'
-      ctx.res.end(JSON.stringify({message: err.message, error: err.message, name: err.name, status: err.status, ...err}));
-      return
-    }
-    return err
-  };
-
-
-  app.context.vmState = function(state, status) {
-    this.state.vm = this.state.vm || {}
-    if (status) {
-      ctx.status = status
-    }
-    if (state) {
-      if (typeof state.toJSON == 'function') {
-        state = state.toJSON();
-      }
-      Object.assign(this.state.vm, state)
-    }
-    return this.state.vm
+    message = String(err.message || statuses[status] || 'Server error')
+    err = httpErrors(status, message, err)
+  } else {
+    err = httpErrors(500, String(err))
   }
 
-  app.context.versionCompare = function(value) {
-    var version
-    if (this.query.version) {
-      version = this.query.version
-    } else if (this.request.body instanceof Object && this.request.body.version) {
-      version = this.request.body.version
-    } else if (this.request.body instanceof Object && this.request.body.fields instanceof Object && this.request.body.fields.version) {
-      version = this.request.body.fields.version
+
+  // 设置状码
+  if (!this.status || this.status < 300 || this.status === 404 || err.status >= 500) {
+    this.status = err.status
+  }
+
+  // 错误事件
+  this.app.emit('error', err, this)
+
+  // 408 链接被断开直接返回
+  if (err.status === 408) {
+    return
+  }
+
+
+  // 不可写 已发送 headers
+  if (this.headerSent || !this.writable) {
+    err.headerSent = true
+    return
+  }
+
+  // 不是 development 模式
+  if ((err.status === 500 && app.env !== 'development') || !err.message) {
+    err.message = statuses[err.status]
+  }
+
+  // 自定义 headers
+  if (err.headers) {
+    this.set(err.headers)
+    delete err.headers
+  }
+
+  // 消息归类
+  if (err.messages) {
+    // 存在 messages
+  } else if (err.name === 'ValidationError' && err.errors) {
+    err.messages = []
+    for (const key in err.errors) {
+      const message = err.errors[key]
+      err.messages.push({
+        code: message.code || message.name,
+        path: message.path || key,
+        message: message.message,
+        ...message,
+      })
     }
+    delete err.errors
+  } else {
+    err.messages = [
+      {
+        message: err.message,
+        ...err,
+      },
+    ]
+  }
+}
 
-    if (!version && typeof version != 'string') {
-      return true
-    }
+app.context.vmState = function vmState(state: Object = {}, status: number = 200): Object {
+  let vm: Object = state
+  if (typeof vm.toJSON === 'function') {
+    vm = vm.toJSON()
+  }
 
+  this.status = status
+  this.state.vm = this.state.vm || {}
+  return Object.assign(this.state.vm, vm)
+}
 
-    version = version.split('.').map(value => parseInt(value))
-    value = value.split('.').map(value => parseInt(value))
+app.context.versionCompare = function versionCompare(version: string): boolean {
+  let queryVersion: mixed
+  let versionArray: Array<string>
+  if (this.query.version) {
+    queryVersion = this.query.version
+  } else if (this.request.body instanceof Object && this.request.body.version) {
+    queryVersion = this.request.body.version
+  } else if (this.request.body instanceof Object && this.request.body.fields instanceof Object && this.request.body.fields.version) {
+    queryVersion = this.request.body.fields.version
+  }
 
-    for (var i = 0; i < value.length; i++) {
-      if (value[i] > (version[i] || 0)) {
-        return false
-      }
-    }
+  if (!queryVersion && typeof queryVersion !== 'string') {
     return true
   }
 
-  app.context.viewModel = function(method, path, query, body) {
-    return viewModels.match(this, method, path, query, body);
-  }
+  queryVersion = String(queryVersion).split('.')
+  versionArray = version.split('.')
 
-
-  // public file
-  app.use(koaStatic(path.join(__dirname, '../public')));
-
-
-
-
-  // access log
-  app.use(async function(ctx, next) {
-    var start = new Date;
-    await next()
-    var ms = new Date - start;
-    var userAgent = ctx.request.header['user-agent'] || '';
-    console.log(`${ctx.method} ${ctx.status} ${ctx.url} - ${moment(start).format('YYYY-MM-DD hh:mm:ss')} - ${ms}ms - ${ctx.request.ip} - ${userAgent}`);
-    ctx.set('X-Response-Time', ms + 'ms');
-    ctx.set('X-Version', packageInfo.version);
-    ctx.set('X-Author', packageInfo.author);
-  });
-
-
-
-  // timeout
-  app.use(async function(ctx, next) {
-    var clear = setTimeout(function() {
-      clear = null
-      var err = new Error('Request timeout');
-      err.status = 502;
-      ctx.onerror(err);
-    }, 60000);
-
-    try {
-      await next()
-    } catch (e) {
-      throw e
-    } finally {
-      clearTimeout(clear);
-      clear = null
+  for (let i = 0; i < versionArray.length; i++) {
+    let value1 = parseInt(version[i], 10)
+    let value2 = parseInt(queryVersion[i], 10) || 0
+    if (value1 > (value2 || 0)) {
+      return false
     }
-  })
-
-  // headers
-  app.use(async function(ctx, next) {
-    ctx.set("X-Content-Type-Options", 'nosniff')
-    ctx.set('X-Frame-Options', 'SAMEORIGIN')
-    await next()
-  })
-
-  // views  viewModels
-  if (process.env.NODE_ENV == 'development') {
-    // delay
-    app.use(async function(ctx, next) {
-      // await new Promise(function(resolve, reject) {
-      //   setTimeout(function() {
-      //     resolve()
-      //   }, 200 + parseInt(Math.random() * 800));
-      // });
-      await next()
-    })
-
-    // app.use(function(ctx, next) {
-    //   return require('views/vue').default(ctx, next)
-    // });
-    app.use(function(ctx, next) {
-      return viewModels.middleware(ctx, next)
-    });
-  } else {
-    // app.use(require('views/vue').default);
-    app.use(viewModels.middleware);
   }
-
-  // 404
-  app.use(async function(ctx) {
-    ctx.throw(404, http.STATUS_CODES[404]);
-  })
-
-  // 错误捕获
-  app.on('error', function(err, ctx) {
-    var date = moment().format('YYYY-MM-DD hh:mm:ss')
-    if (err.status || !err.status >= 500) {
-      console.error(date, 'server error :', err, ctx);
-    } else {
-      console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${err.message}`);
-    }
-  });
-  return app
+  return true
 }
+
+app.context.viewModel = function viewModel() {
+  return viewModels.match(this, ...arguments)
+}
+
+
+// public file
+app.use(koaStatic(path.join(__dirname, '../public')))
+
+
+
+// access log
+app.use(async function (ctx, next) {
+  let start = new Date
+  await next()
+  let ms = new Date - start
+  let userAgent = ctx.request.header['user-agent'] || ''
+  console.log(`${ctx.method} ${ctx.status} ${ctx.url} - ${moment(start).format('YYYY-MM-DD hh:mm:ss')} - ${ms}ms - ${ctx.request.ip} - ${userAgent}`)
+  ctx.set('X-Response-Time', ms + 'ms')
+  ctx.set('X-Version', packageInfo.version)
+  ctx.set('X-Author', packageInfo.author)
+})
+
+
+
+// timeout
+app.use(async function (ctx, next) {
+  let clear = setTimeout(function () {
+    clear = null
+    ctx.onerror(httpErrors(502, 'Request timeout'))
+  }, 60000)
+
+  try {
+    await next()
+  } catch (e) {
+    throw e
+  } finally {
+    clearTimeout(clear)
+    clear = null
+  }
+})
+
+// headers
+app.use(async function (ctx, next) {
+  ctx.set('X-Content-Type-Options', 'nosniff')
+  ctx.set('X-Frame-Options', 'SAMEORIGIN')
+  await next()
+})
+
+// views  viewModels
+if (process.env.NODE_ENV === 'development') {
+  // delay
+  app.use(async function (ctx, next) {
+    await new Promise(function (resolve, reject) {
+      setTimeout(function () {
+        resolve()
+      }, 40 + parseInt(Math.random() * 500, 10))
+    })
+    await next()
+  })
+
+  // app.use(function(ctx, next) {
+  //   return require('views/vue').default(ctx, next)
+  // })
+  app.use(function (ctx, next) {
+    return viewModels.middleware(ctx, next)
+  })
+} else {
+  // app.use(require('views/vue').default)
+  app.use(viewModels.middleware)
+}
+
+// 404
+app.use(function (ctx) {
+  ctx.throw(404)
+})
+
+
+// 错误捕获
+app.on('error', function (err: Error, ctx): void {
+  let date: string = moment().format('YYYY-MM-DD hh:mm:ss')
+  if (!err.status || err.status >= 500) {
+    console.error(date, 'server error :', err, ctx)
+  } else {
+    console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${err.message}`)
+  }
+})
+
+
+export default app

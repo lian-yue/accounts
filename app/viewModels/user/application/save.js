@@ -21,6 +21,7 @@ export default async function (ctx) {
   }
   await application.setToken(token).canThrow('save')
 
+  var oldName = application.get('name')
 
   if (typeof params.name == 'string') {
     application.set('name', params.name)
@@ -143,6 +144,8 @@ export default async function (ctx) {
   var message = new Message({
     user: application.get('creator'),
     creator: tokenUser,
+    applicationId: application.get('_id'),
+    name: oldName || application.get('name'),
     type: 'application_save',
     readOnly: true,
     token,

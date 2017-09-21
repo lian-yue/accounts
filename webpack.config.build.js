@@ -1,24 +1,24 @@
 const fs          = require('fs')
 const packageInfo = require('./package')
-var configClient  = require('./webpack.config.client')
-var configServer  = require('./webpack.config.server')
+let configClient  = require('./webpack.config.client')
+let configServer  = require('./webpack.config.server')
 
-if (!process.env.npm_config_noVersion && process.env.NODE_ENV != "development") {
-  let version = packageInfo.version.split('.');
-  version[version.length -1] = parseInt(version[version.length -1]) + 1;
-  packageInfo.version = version.join('.');
+if (!process.env.npm_config_noVersion && process.env.NODE_ENV !== 'development') {
+  let version = packageInfo.version.split('.')
+  version[version.length - 1] = parseInt(version[version.length - 1], 10) + 1
+  packageInfo.version = version.join('.')
 
 
-  process.on('exit', function(code) {
+  process.on('exit', function (code) {
     if (code) {
-      return;
+      return
     }
-    fs.writeFileSync('./package.json', JSON.stringify(packageInfo, null, '  '));
-  });
+    fs.writeFileSync('./package.json', JSON.stringify(packageInfo, null, '  '))
+  })
 }
 
 
-var config = []
+let config = []
 if (!(configClient instanceof Array)) {
   configClient = [configClient]
 }
@@ -33,6 +33,5 @@ if (!process.env.npm_config_noServer) {
 if (!process.env.npm_config_noClient) {
   config.push(...configClient)
 }
-
 
 module.exports = config

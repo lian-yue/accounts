@@ -1,149 +1,52 @@
+/* @flow */
 import querystring from 'querystring'
 import {qq as config} from 'config/oauth'
 
 import Api from './api'
-import Component from './component'
 
 
-config.clientId =  config.clientId || config.client_id || config.appkey || config.app_key
-config.clientSecret = config.clientSecret || config.client_secret || config.appSecret || config.app_secret  || config.secretKey || config.secret_key
+config.clientId = config.clientId || config.client_id || config.appkey || config.app_key
+config.clientSecret = config.clientSecret || config.client_secret || config.appSecret || config.app_secret || config.secretKey || config.secret_key
 config.scope = config.scope || config.scopes
-if (config.scope instanceof Array) {
-  config.scope = config.scope.join(',')
+if (!(config.scope instanceof Array)) {
+  config.scope = config.scope.split(/[|, ]/)
 }
 
-class QQApi extends Api{
 
-  baseUri = 'https://graph.qq.com'
+export default class QQ extends Api {
 
-  _accessTokenPath = '/oauth2.0/token'
+  baseUri: string = 'https://graph.qq.com'
 
-  _authorizePath = '/oauth2.0/authorize'
+  accessTokenPath: string = '/oauth2.0/token'
 
-  constructor(clientId, clientSecret, redirectUri) {
-    super(clientId, clientSecret, redirectUri)
-  }
+  authorizePath: string = '/oauth2.0/authorize'
 
-  getAccessToken(code, params) {
-    if (!code && !params) {
-      return super.getAccessToken(code, params)
+  name: string = config.name
+
+  constructor(clientId: string = config.clientId, clientSecret: string = config.clientSecret) {
+    super(clientId, clientSecret)
+    this.setScope(config.scope)
+    if (config.redirectUri) {
+      this.setRedirectUri(config.redirectUri)
     }
-    return new Promise((resolve, reject) => {
-      super.getAccessToken(code, params).then((accessToken) => {
-        if (accessToken.openid) {
-          resolve(accessToken)
-          return
-        }
-
-        this._request('GET', '/oauth2.0/me', {
-          access_token: accessToken.access_token
-        }).then((body) => {
-          if (!body.openid) {
-            throw new Error('openid is empty')
-          }
-          return Object.assign(accessToken, body)
-        }).then(resolve, reject)
-      }, reject)
-    });
-  }
-
-
-  api(method, path, params, headers, body) {
-    if (!params.openid) {
-      var accessToken = this.getAccessToken();
-      if (!accessToken || !accessToken.openid) {
-        throw new Error('Not configuration openid');
-      }
-      params.openid = accessToken.openid
-    }
-    return super.getAccessToken(method, path, params, headers, body)
-  }
-
-
-  _response(body) {
-    body = body.trim().replace(/[\r\n\t ;]$/g, '');
-    if (body.substr(0, 9) == 'callback(') {
-      body = body.substr(9, -1).trim()
-    }
-
-    if (body.substr(0, 1) === '\u007B' || body.substr(0, 1) === '\u005B') {
-      body = JSON.parse(body)
-    } else {
-      body = querystring.parse(body)
-    }
-
-
-    var message
-    if (body.error_description) {
-      message = body.error_description
-    } else if (body.error) {
-      if (isNaN(body.error)) {
-        message = body.error
-      } else {
-        message = 'Error code ' + body.error
-        message = body.error
-      }
-    } else if (body.ret) {
-      if (body.msg) {
-        message = body.msg
-      } else {
-        message = 'Error code ' + body.ret
-      }
-    }
-    if (message) {
-      var e = new Error(message)
-      if (!isNaN(body.error)) {
-        e.code = body.error
-      }
-      throw e;
-    }
-    return body
   }
 
 
 
-  getUserInfo() {
-    return this.api('GET', '/user/get_user_info');
-  }
-
-}
-
-export default class QQ extends Component{
-
-  name = config.name
-
-  get client() {
-    if (!this._client) {
-      this._client = new QQApi(config.clientId, config.clientSecret, this._redirectUri);
+  async getUserInfo(): Promise<Object> {
+    if (this.userInfo) {
+      return this.userInfo
     }
-    return this._client;
-  }
-
-  async getUserInfo() {
-    if (this._userInfo) {
-      return this._userInfo
-    }
-
-    var userInfo = await this.client.getUserInfo();
-
-
-    /*var email;
-    try {
-      email = await this.client.api('GET', '/2/account/profile/email.json');
-    } catch (e) {
-    }*/
-
-
-
-    var result = {}
+    let userInfo = await this.api('GET', '/user/get_user_info')
+    let result = {}
 
     const columns = {
       userid: 'id',
       domain: 'username',
       username: 'nickname',
       userdetail: 'description',
-      portrait:'avatar',
-      birthday:'birthday',
+      portrait: 'avatar',
+      birthday: 'birthday',
       sex: 'gender',
       lang: 'locale',
     }
@@ -164,28 +67,72 @@ export default class QQ extends Component{
         case '女':
         case '0':
           result.gender = 'female'
-          break;
+          break
         default:
           delete result.gender
       }
     }
 
-    if (result.birthday && result.birthday == '0000-00-00') {
-      delete result.birthday;
+    if (result.birthday && result.birthday === '0000-00-00') {
+      delete result.birthday
     }
     if (result.avatar) {
-      result.avatar = 'http://tb.himg.qq.com/sys/portrait/item/' +  result.avatar
+      result.avatar = 'http://tb.himg.qq.com/sys/portrait/item/' + result.avatar
     }
-
     return this.filterUserInfo(result)
   }
 
 
-  async redirectUri() {
-    return this.client.getAuthorizeUri({
-      scope: config.scope,
-      state: this.state,
-      response_type: 'code',
-    });
+  api(method: string, path: string, params: Object = {}, body: Object = {}, headers: Object = {}, args: Object = {}): Promise<Object> {
+    if (!params.openid && !body.openid) {
+      let accessToken = this.getAccessToken()
+      if (!accessToken || !accessToken.openid) {
+        throw new Error('The "openid" is empty')
+      }
+      if (method === 'GET' || method === 'HEAD') {
+        params.openid = accessToken.openid
+      } else {
+        body.openid = accessToken.openid
+      }
+    }
+    return super.api(method, path, params, body, headers, args)
+  }
+
+
+  response(response: Object): Object {
+    let body = response.body.trim().replace(/[\r\n\t ;]$/g, '')
+    if (body.substr(0, 9) === 'callback(') {
+      body = body.substr(9, -1).trim()
+    }
+
+    if (body.substr(0, 1) === '\u007B' || body.substr(0, 1) === '\u005B') {
+      body = JSON.parse(body)
+    } else {
+      body = querystring.parse(body)
+    }
+
+
+    let message
+    if (body.error_description) {
+      message = body.error_description
+    } else if (body.error) {
+      message = isNaN(body.error) ? body.error : 'Error code ' + body.error
+    } else if (body.ret) {
+      message = body.msg ? body.msg : 'Error code ' + body.ret
+    } else if (response.statusCode >= 400) {
+      message = 'Error status code: ' + response.statusCode
+    }
+
+    if (message) {
+      let e = new Error(message)
+      if (!isNaN(body.error)) {
+        e.code = body.error
+      }
+      if (response.statusCode >= 400) {
+        e.statusCode = response.statusCode
+      }
+      throw e
+    }
+    return body
   }
 }

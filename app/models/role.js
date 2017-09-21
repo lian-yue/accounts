@@ -1,8 +1,6 @@
-import {Schema, Types} from 'mongoose'
-
+import {Schema} from 'mongoose'
 
 import model from './model'
-
 
 // 127 以下是普通用户
 // 255 无限制管理员
@@ -27,19 +25,6 @@ const schema = new Schema({
     required: true,
   },
 
-  creator: {
-    type: Schema.Types.ObjectId,
-    index: true,
-    ref: 'User',
-    required: true,
-  },
-
-  updater: {
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
-
   // 内容
   content: {
     type: String,
@@ -54,14 +39,15 @@ const schema = new Schema({
       validate: [
         {
           validator(id) {
-            return this.get('children').length <= 8;
+            return this.get('children').length <= 8
           },
           message: '继承用户组不能大于 8 个 ({PATH})',
         },
         {
-          async validator(id, cb) {
-            var role = await Role.findById(id).read('primary').exec();
-            cb(role && this.get('application').equals(role.get('application')) && !this.equals(role))
+          isAsync: true,
+          async validator(id) {
+            let role = await this.constructor.findById(id).read('primary').exec()
+            return role && this.get('application').equals(role.get('application')) && !this.equals(role)
           },
           message: '继承用户组不存在 ({PATH})',
         },
@@ -78,7 +64,7 @@ const schema = new Schema({
         validate: [
           {
             validator(scope) {
-              return this.get('rules').length <= 32;
+              return this.get('rules').length <= 32
             },
             message: '规则数量不能大于 32 条 ({PATH})',
           },
@@ -105,9 +91,7 @@ const schema = new Schema({
     type: Date,
     index: true,
   },
-});
+})
 
 
-
-const Role = model('Role', schema);
-export default Role
+export default model('Role', schema)

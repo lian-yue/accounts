@@ -1,34 +1,33 @@
-const fs                = require('fs')
-const path              = require('path')
-const webpack           = require('webpack')
-const merge             = require('webpack-merge')
-const precss            = require('precss')
-const autoprefixer      = require('autoprefixer')
-const { VueSSRServerPlugin } = require('vue-ssr-webpack-plugin')
+const fs                   = require('fs')
+const path                 = require('path')
+const webpack              = require('webpack')
+const merge                = require('webpack-merge')
+const precss               = require('precss')
+const autoprefixer         = require('autoprefixer')
+const {VueSSRServerPlugin} = require('vue-ssr-webpack-plugin')
 
 
 const packageInfo       = require('./package')
 const site              = require('./config/site')
 
-var ignoreModules = fs.readdirSync('node_modules')
+const ignoreModules = fs.readdirSync('node_modules')
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'production'
 
-const isDev = process.env.NODE_ENV == 'development'
+const isDev = process.env.NODE_ENV === 'development'
 
 
 
 
-function base(opts) {
-  opts = opts || {}
+function base(opts = {}) {
   opts.externals = opts.externals || '../'
   const publicPath = site.assets + opts.name + '/'
 
   return {
     output: {
       path: path.resolve(__dirname, isDev ? 'dev' : 'dist'),
-      filename: "[name].js",
-      chunkFilename: "[chunkhash:8].[name].chunk.js",
+      filename: '[name].js',
+      chunkFilename: '[chunkhash:8].[name].chunk.js',
       libraryTarget: 'commonjs2',
     },
 
@@ -52,7 +51,7 @@ function base(opts) {
       ],
 
       alias: {
-        package: path.join(__dirname, 'package.js'),
+        package: path.join(__dirname, 'package.json'),
         config: path.join(__dirname, 'config'),
         models: path.join(__dirname, 'app/models'),
         viewModels: path.join(__dirname, 'app/viewModels'),
@@ -72,34 +71,34 @@ function base(opts) {
 
     externals: [
       function (context, request, callback) {
-        var pathStart = request.split('/')[0]
+        let pathStart = request.split('/')[0]
 
         // ! 开始指定 loader
-        if (!pathStart || pathStart[0] === '!' || request.indexOf('?') != -1) {
-          return callback();
+        if (!pathStart || pathStart[0] === '!' || request.indexOf('?') !== -1) {
+          return callback()
         }
 
         // 忽略的模块
-        if (ignoreModules.indexOf(pathStart) != -1) {
-          return callback(null, 'commonjs2 ' + request);
+        if (ignoreModules.indexOf(pathStart) !== -1) {
+          return callback(null, 'commonjs2 ' + request)
         }
 
         //  config 配置文件
-        if (pathStart == 'config') {
-          return callback(null, 'commonjs2 ' + opts.externals + request);
+        if (pathStart === 'config') {
+          return callback(null, 'commonjs2 ' + opts.externals + request)
         }
 
         //  package 配置文件
-        if (pathStart == 'package') {
-          return callback(null, 'commonjs2 ' + opts.externals + request);
+        if (pathStart === 'package') {
+          return callback(null, 'commonjs2 ' + opts.externals + request)
         }
 
         //  vue-ssr-bundle
-        if (pathStart == 'vue-ssr-bundle' && !isDev) {
-          return callback(null, 'commonjs2 ./' + request);
+        if (pathStart === 'vue-ssr-bundle' && !isDev) {
+          return callback(null, 'commonjs2 ./' + request)
         }
 
-        return callback();
+        return callback()
       }
     ],
 
@@ -153,7 +152,7 @@ function base(opts) {
 
 
     plugins: [
-      new webpack.BannerPlugin("Name: "+packageInfo.name+"\nVersion: "+ packageInfo.version +"\nAuthor: "+ packageInfo.author +"\nDescription: "+ packageInfo.description +""),
+      new webpack.BannerPlugin(`Name: ${packageInfo.name}\nVersion: ${packageInfo.version}\nAuthor: ${packageInfo.author}Description: ${packageInfo.description}`),
       new webpack.DefinePlugin({
         'process.env': {
           NODE_ENV: JSON.stringify(process.env.NODE_ENV),
@@ -165,7 +164,7 @@ function base(opts) {
       }),
       new webpack.optimize.UglifyJsPlugin({
         compress: {
-          warnings : false,
+          warnings: false,
         },
         comments: true,
         beautify: true,
@@ -179,8 +178,8 @@ function base(opts) {
       new webpack.NamedModulesPlugin(),
     ],
 
-    // devtool: isDev ? 'eval-source-map' : 'source-map'
-    devtool: isDev ? 'source-map' : 'source-map'
+    devtool: isDev ? 'eval-source-map' : 'source-map'
+    // devtool: isDev ? 'source-map' : 'source-map'
   }
 }
 
@@ -214,19 +213,26 @@ const index = merge(base({name: 'index'}), {
             loader: 'babel-loader',
             options: {
               presets: [
-                "es2015",
-                "stage-0"
+                'es2015',
+                'stage-0',
+                'flow',
               ],
               plugins: [
-                "transform-decorators-legacy",
-                "transform-runtime",
+                'transform-decorators-legacy',
+                'transform-runtime',
               ],
               cacheDirectory: isDev
             },
-          }
+          },
+          {
+            loader: 'eslint-loader',
+          },
         ],
         exclude: [
-          path.resolve(__dirname, "node_modules"),
+          path.resolve(__dirname, 'node_modules'),
+          path.resolve(__dirname, 'config'),
+          path.resolve(__dirname, 'dev'),
+          path.resolve(__dirname, 'dist'),
         ],
       },
       {
@@ -243,6 +249,130 @@ if (isDev) {
   index.plugins.push(new webpack.HotModuleReplacementPlugin())
 }
 
+
+const vue = merge(base({name: 'vue', externals: '../../'}), {
+  entry: {
+    vue: [
+      path.resolve(__dirname, 'app/views/vue/server'),
+    ],
+  },
+
+  resolve: {
+    extensions: [
+      isDev ? '.dev.vue' : '.prod.vue',
+      '.vue',
+    ],
+  },
+
+  module: {
+    rules: [
+      {
+        test: /\.vue$/,
+        loader: 'vue-loader',
+        options: {
+          preserveWhitespace: false,
+          postcss: {
+            plugins() {
+              return [
+                precss,
+                autoprefixer
+              ]
+            }
+          },
+          cssModules: {
+            localIdentName: '[hash:base64:8]',
+            camelCase: true
+          },
+          loaders: {
+            js: [
+              {
+                loader: 'babel-loader',
+                options: {
+                  presets: [
+                    'es2015',
+                    'stage-0'
+                  ],
+                  plugins: [
+                    'transform-vue-jsx',
+                    'transform-decorators-legacy',
+                    'transform-runtime',
+                  ],
+                  cacheDirectory: isDev
+                }
+              }
+            ],
+            sass: [
+              {
+                loader: 'vue-style-loader',
+              },
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                },
+              },
+              {
+                loader: 'sass-loader',
+                options: {
+                  sourceMap: true,
+                  indentedSyntax: true,
+                  includePaths: [
+                    path.join(__dirname, 'node_modules'),
+                  ],
+                }
+              },
+            ],
+            scss: [
+              {
+                loader: 'vue-style-loader',
+              },
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                },
+              },
+              {
+                loader: 'sass-loader',
+                options: {
+                  sourceMap: true,
+                  includePaths: [
+                    path.join(__dirname, 'node_modules'),
+                  ],
+                },
+              },
+            ]
+          }
+        }
+      },
+      {
+        test: /\.jsx?$/,
+        loader: 'babel-loader',
+        options: {
+          presets: [
+            'es2015',
+            'stage-0'
+          ],
+          plugins: [
+            'transform-vue-jsx',
+            'transform-decorators-legacy',
+            'transform-runtime',
+          ],
+          cacheDirectory: isDev
+        },
+      },
+    ]
+  },
+
+  plugins: [
+    new webpack.DefinePlugin({
+      'process.env.VUE_ENV': '"server"'
+    }),
+    new VueSSRServerPlugin(),
+  ],
+})
+
 module.exports = [
+  vue,
   index,
 ]

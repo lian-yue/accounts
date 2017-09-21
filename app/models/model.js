@@ -1,272 +1,212 @@
-import utils from 'mongoose/lib/utils'
+/* @flow */
+import httpErrors from 'http-errors'
 import configMongodb from 'config/mongodb'
-import mongoose, { Document, Schema, SchemaType } from 'mongoose'
+import mongoose, {Schema, Document} from 'mongoose'
 
-mongoose.Promise = global.Promise;
+mongoose.Promise = global.Promise
 
-const db = mongoose.createConnection(configMongodb, {noVirtualId: true, useNestedStrict: true,id: false});
-
+const db = mongoose.connect(configMongodb, {useMongoClient: true, poolSize: 10})
 
 // 数字类型
 function Integer(key, options) {
-  SchemaType.call(this, key, options, 'Integer')
+  mongoose.SchemaType.call(this, key, options, 'Integer')
 }
-Integer.prototype = Object.create(Schema.Types.Number.prototype);
 
-
-Integer.prototype.cast = function(value) {
-  var _value = parseInt(value);
+Integer.prototype = Object.create(Schema.Types.Number.prototype)
+Integer.prototype.cast = function (value) {
+  let _value = parseInt(value, 10)
   if (isNaN(_value)) {
-    throw new Error(`Integer: ${value} is not a integer`);
+    throw new Error(`Integer: ${value} is not a integer`)
   }
-  return _value;
+  return _value
 }
-Schema.Types.Integer = Integer;
+Schema.Types.Integer = Integer
 
 
-
-;(function(Schema) {
-  if (Schema.prototype.preOriginal) {
-    return;
-  }
-
-  Schema.prototype.preOriginal = Schema.prototype.pre
-  Schema.prototype.postOriginal = Schema.prototype.post
-
-  Schema.prototype.pre = function(name, isAsync, fn, errorCb) {
-    if (arguments.length == 2 && isAsync.length == 0) {
-      fn = function(next) {
-        var result = isAsync.apply(this, []);
-        if (result && result.then) {
-          result.then(() => {
-            next();
-          }, next);
-        } else {
-          next()
-        }
-      }
-      return this.preOriginal.apply(this, [name, fn])
-    }
-    return this.preOriginal.apply(this, arguments)
-  }
-
-  Schema.prototype.post = function(name, isAsync, fn) {
-    if (arguments.length == 2 && isAsync.length == 0) {
-      fn = function(doc, next) {
-        var result = isAsync.apply(this, [])
-        if (result && result.then) {
-          result.then(() => {
-            next();
-          }, next);
-        } else {
-          next()
-        }
-      }
-      return this.postOriginal.apply(this, [name, fn])
-    }
-    return this.postOriginal.apply(this, arguments)
-  }
-})(Schema)
-
-
-
-
-
-
-
-SchemaType.prototype.doValidate = function(value, fn, scope) {
-  var err = false,
-      path = this.path,
-      count = this.validators.length;
-
-  if (!count) {
-    return fn(null);
-  }
-
-  var validate = function(ok, validatorProperties) {
-    if (err) {
-      return;
-    }
-    if (ok === void 0 || ok) {
-      --count || fn(null);
-    } else {
-      err = new mongoose.Error.ValidatorError(validatorProperties);
-      fn(err);
-    }
-  };
-
-  var _this = this;
-  this.validators.forEach(function(v) {
-    if (err) {
-      return;
-    }
-
-    var validator = v.validator;
-
-    var validatorProperties = utils.clone(v);
-    validatorProperties.path = path
-    validatorProperties.value = value
-
-    if (validator instanceof RegExp) {
-      validate(validator.test(value), validatorProperties);
-    } else if (typeof validator === 'function') {
-      if (value === void 0 && !_this.isRequired) {
-        validate(true, validatorProperties);
-        return;
-      }
-      if (validator.length === 2) {
-        var isReturn = false
-        var returnVal = validator.call(scope, value, function(ok, customMsg) {
-          if (isReturn) {
-            return
-          }
-          isReturn = true
-          if (typeof returnVal === 'boolean') {
-            return;
-          }
-          if (customMsg) {
-            validatorProperties.message = customMsg;
-          }
-          validate(ok, validatorProperties);
-        });
-        if (typeof returnVal === 'boolean') {
-          validate(returnVal, validatorProperties);
-        } else if (returnVal instanceof Promise) {
-          returnVal.then(function(ok) {
-            if (isReturn) {
-              return
-            }
-            isReturn = true
-            validate(ok, validatorProperties)
-          }, function(e) {
-            if (isReturn) {
-              return
-            }
-            isReturn = true
-            validatorProperties.message = e.message
-            validate(false, validatorProperties)
-          })
-        }
-      } else {
-        validate(validator.call(scope, value), validatorProperties);
-      }
-    }
-  });
-};
-
-
-
-
-
-Document.prototype.savePost = function(fn) {
-  this.$_savePosts = this.$_savePosts || []
-  this.$_savePosts.push(fn)
+/**
+ * 保存事件
+ * @param  {Function} fn [description]
+ * @param  {String} method [description]
+ * @return this
+ */
+// $flow-disable-line
+Document.prototype.oncePost = function oncePost(fn: Function, ignoreError: boolean = false) {
+  fn.ignoreError = ignoreError
+  this.$_oncePosts = this.$_oncePosts || []
+  this.$_oncePosts.push(fn)
   return this
 }
 
-Document.prototype.removePost = function(fn) {
-  this.$_removePosts = this.$_removePosts || []
-  this.$_removePosts.push(fn)
-  return this
-}
-
-
-Document.prototype.setToken = function(token) {
+// $flow-disable-line
+Document.prototype.setToken = function setToken(token?: {modelName: 'Token'}) {
   this.$_token = token
   return this
 }
-
-Document.prototype.getToken = function() {
+// $flow-disable-line
+Document.prototype.getToken = function getToken() {
   return this.$_token
 }
 
-
-Document.prototype.cans = async function(...args) {
-  for (var i = 0; i < args.length; i++) {
-    var arg = args[i]
-    if (!Array.isArray(arg)) {
-      arg = [arg]
-    }
-    if (!await this.can(...arg)) {
-      return false
-    }
-  }
-  return true
+// $flow-disable-line
+Document.prototype.throw = function (): void {
+  throw httpErrors(...arguments)
 }
 
-Document.prototype.cansThrow = async function(...args) {
-  if (!(await this.cans(...args))) {
-    var e = new Error('无权限')
-    e.code = 'invalid_scope'
-    e.status = 403
+// $flow-disable-line
+Document.prototype.throwTokenNotExists = function throwTokenNotExists(): void {
+  this.throw(400, '`token` does not exist')
+}
+
+// $flow-disable-line
+Document.prototype.can = async function can(options: string | string[] | {[key: string]: any}): Promise<void> {
+  try {
+    if (typeof options === 'string') {
+      let fn = 'can' + options.replace(/(^|_|-)(.)/g, (value, value2, value3: string) => value3.toUpperCase())
+      if (typeof this[fn] !== 'function') {
+        this.throw(500, `The "${fn}" method does not exist`)
+      }
+      let argsArray = [this.getToken()]
+      if (arguments.length > 1) {
+        argsArray.push(arguments[1])
+      }
+      await this.cans[fn].apply(this, argsArray)
+      return
+    }
+
+    if (options instanceof Array) {
+      let argsArray = [this.getToken()]
+      if (arguments.length > 1) {
+        argsArray.push(arguments[1])
+      }
+      for (let i = 0; i < options.length; i++) {
+        let name = options[i]
+        let fn = 'can' + name.replace(/(^|_|-)(.)/g, (value, value2, value3: string) => value3.toUpperCase())
+        if (typeof this[fn] !== 'function') {
+          this.throw(500, `The "${fn}" method does not exist`)
+        }
+        await this.cans[fn].apply(this, argsArray)
+      }
+      return
+    }
+    for (let name in options) {
+      let fn = 'can' + name.replace(/(^|_|-)(.)/g, (value, value2, value3) => value3.toUpperCase())
+      if (typeof this[fn] !== 'function') {
+        this.throw(500, `The "${fn}" method does not exist`)
+      }
+      let argsArray = [this.getToken()]
+      if (options[name]) {
+        argsArray.push(options[name])
+      } else if (arguments.length > 1) {
+        argsArray.push(arguments[1])
+      }
+      await this.cans[fn].apply(this, argsArray)
+    }
+  } catch (e) {
+    e.can = true
     throw e
   }
 }
 
-Document.prototype.canThrow = async function(...args) {
-  if (!(await this.can(...args))) {
-    var e = new Error('无权限')
-    e.code = 'invalid_scope'
-    e.status = 403
-    throw e;
+// $flow-disable-line
+Document.prototype.canBoolean = async function canBoolean(): Promise<boolean> {
+  try {
+    await this.can(...arguments)
+  } catch (e) {
+    return false
   }
+  return true
 }
 
-export default function(name, schema, options) {
-  if (schema instanceof Schema) {
-    if (options) {
-      for (let key in options) {
-        schema.set(key, options[key])
+
+/**
+ * asyncMiddleware  中间件 增加 async，await 支持
+ * @param  {Function} fn 原中间件
+ * @return {Function}    修改后的的中间件
+ */
+// $flow-disable-line
+Schema.prototype.preAsync = function preAsync(name: string, fn: Function) {
+  if (fn.length === 2) {
+    return this.pre(name, function (next: Function, done: Function) {
+      let isNext: boolean = false
+      let _next: Function = function () {
+        if (isNext) {
+          return
+        }
+        isNext = true
+        next(...arguments)
       }
+      Promise.resolve(fn.apply(this, [_next, done])).then(_next).catch(_next)
+    })
+  }
+  return this.pre(name, function (next: Function) {
+    let isNext: boolean = false
+    let _next: Function = function () {
+      if (isNext) {
+        return
+      }
+      isNext = true
+      next(...arguments)
     }
-  } else {
-    schema = new Schema(schema, options || {});
+    Promise.resolve(fn.apply(this, [_next])).then(_next).catch(_next)
+  })
+}
+
+// $flow-disable-line
+Schema.prototype.postAsync = function postAsync(name: string, fn: Function) {
+  if (fn.length === 3) {
+    return this.post(name, function (error, res, next) {
+      let isNext: boolean = false
+      let _next: Function = function () {
+        if (isNext) {
+          return
+        }
+        isNext = true
+        next(...arguments)
+      }
+      Promise.resolve(fn.apply(this, [error, res, _next])).then(_next).catch(_next)
+    })
   }
 
-
-  schema.post('save', async function() {
-    var savePosts = this.$_savePosts || []
-    var removePosts = this.$_removePosts || []
-    delete this.$_savePosts
-    delete this.$_removePosts
-    this.$_savePosts = []
-    this.$_removePosts = []
-
-    for (let i = 0; i < savePosts.length; i++) {
-      let item = savePosts[i];
-      if (!item) {
-        continue
+  return this.post(name, function (res: any, next: Function) {
+    let isNext: boolean = false
+    let _next: Function = function () {
+      if (isNext) {
+        return
       }
-
-      try {
-        if (typeof item == 'function') {
-          await item.call(this)
-        } else {
-          await item.save()
-        }
-      } catch (e) {
-        throw e
-      }
+      isNext = true
+      next(...arguments)
     }
+    Promise.resolve(fn.apply(this, [res, _next])).then(_next).catch(_next)
+  })
+}
 
-    for (let i = 0; i < removePosts.length; i++) {
-      let item = removePosts[i];
-      if (!item) {
-        continue
-      }
+
+export default function (name: string, _schema: Object, options: Object = {}) {
+  let schema = _schema
+  if (schema instanceof Schema) {
+    for (let key in options) {
+      schema.set(key, options[key])
+    }
+  } else {
+    schema = new Schema(schema, options)
+  }
+
+  schema.postAsync('save', async function () {
+    let posts = this.$_oncePosts || []
+    delete this.$_oncePosts
+    for (let i = 0; i < posts.length; i++) {
+      let post = posts[i]
       try {
-        if (typeof item == 'function') {
-          await item.call(this)
-        } else {
-          await item.remove()
-        }
+        await post.call(this)
       } catch (e) {
-        throw e
+        if (!post.ignoreError) {
+          throw e
+        }
       }
     }
   })
-  if (process.env.NODE_ENV == 'development') {
+  if (process.env.NODE_ENV === 'development') {
     delete db.models[name]
   }
-  return db.model(name, schema);
-};
+  return db.model(name, schema)
+}

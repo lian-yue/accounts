@@ -17,6 +17,7 @@ export default async function (ctx) {
   }
   await user.setToken(token).canThrow('save')
 
+
   // 密码
   if (user.isNew) {
     this.set('password', String(params.password || ''))
@@ -75,18 +76,21 @@ export default async function (ctx) {
   await user.save()
 
   var data = {}
-  for (let i = 0; i < paths.length; i++) {
-    let path = paths[i]
-    if (path.indexOf('.') != -1 || ['meta', '_id', 'registerIp'].indexOf(path) != -1) {
-      continue
+  if (!isNew) {
+    for (let i = 0; i < paths.length; i++) {
+      let path = paths[i]
+      if (path.indexOf('.') != -1 || ['meta', '_id', 'registerIp'].indexOf(path) != -1) {
+        continue
+      }
+      data[path] = path == 'password' ? '***' : user.get(path)
     }
-    data[path] = path == 'password' ? '***' : user.get(path)
   }
 
   var message = new Message({
     user,
     creator: tokenUser,
     type: 'user_save',
+    create: isNew,
     readOnly: true,
     data,
     token,

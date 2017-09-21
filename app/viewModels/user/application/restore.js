@@ -1,6 +1,7 @@
 import Message from 'models/message'
 export default async function (ctx) {
   var token = ctx.state.token
+  var tokenUser = token.get('tokenUser')
   var application = ctx.state.applicationState
   var params = {
     ...ctx.request.query,
@@ -18,7 +19,9 @@ export default async function (ctx) {
     user: application.get('creator'),
     type: 'application_restore',
     creator: tokenUser,
-    readAt: user.equals(tokenUser) ? new Date : void 0,
+    applicationId: application.get('_id'),
+    name: application.get('name'),
+    readAt: tokenUser.equals(application.get('creator')) ? new Date : void 0,
     reason: application.get('reason'),
     token,
   })
