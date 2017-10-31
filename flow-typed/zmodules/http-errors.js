@@ -1,16 +1,16 @@
-// flow-typed signature: 573c576fe34eb3c3c65dd7a9c90a46d2
-// flow-typed version: b43dff3e0e/http-errors_v1.x.x/flow_>=v0.25.x
-
+/* @flow */
 declare module 'http-errors' {
   declare class SpecialHttpError extends HttpError {
     constructor(): SpecialHttpError;
   }
   declare class HttpError extends Error {
-    expose: bool;
+    expose: boolean;
     message: string;
     status: number;
     statusCode: number;
+    [key: string]: any;
   }
+
   declare module.exports: {
     (status?: number, message?: string, props?: Object): HttpError;
     HttpError: typeof HttpError;

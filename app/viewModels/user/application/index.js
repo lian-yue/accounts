@@ -1,4 +1,5 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
 import body from 'viewModels/middlewares/body'
 import tokenMiddleware from 'viewModels/middlewares/token'
@@ -9,10 +10,11 @@ import read from './read'
 import save from './save'
 import status from './status'
 import del from './delete'
-import restore from './restore'
 
 import role from './role'
 
+
+import type { Context } from 'koa'
 
 const accessToken = tokenMiddleware({
   types: ['access'],
@@ -40,7 +42,7 @@ router.get('/', accessToken, list)
 router.get('/:application', readAccessToken, applicationMiddleware, read)
 
 router.get(accessToken)
-router.opt(ctx => {})
+router.opt(function (ctx: Context): void {})
 
 router.use('/:application/role', applicationMiddleware, role)
 
@@ -55,6 +57,5 @@ router.post('/:application', applicationMiddleware, save)
 router.del('/:application', applicationMiddleware, del)
 router.post('/:application/status', applicationMiddleware, status)
 router.post('/:application/delete', applicationMiddleware, del)
-router.post('/:application/restore', applicationMiddleware, restore)
 
 export default router

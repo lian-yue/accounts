@@ -1,30 +1,33 @@
+/* @flow */
 import { Types } from 'mongoose'
 import User from 'models/user'
 
+import type { Context } from 'koa'
+import type Token from 'models/token'
+
 const ObjectId = Types.ObjectId
 
-export default async function (ctx) {
-  // canThrow
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  await tokenUser.setToken(token).canThrow('list')
+export default async function (ctx: Context) {
+  let token: Token = ctx.state.token
+  let tokenUser: User = token.get('user')
+  await tokenUser.setToken(token).can('list')
 
-  var params = {...ctx.query}
+  let params = { ...ctx.request.query }
 
-  var query = {}
-  var options = {
+  let query = {}
+  let options = {
     limit: 50,
   }
 
 
   if (params.limit && params.limit <= 200 && params.limit >= 1) {
-    options.limit = parseInt(params.limit)
+    options.limit = parseInt(params.limit, 10)
   }
 
 
   if (params.lt_id) {
     try {
-      query._id = {$lt:new ObjectId(params.lt_id)};
+      query._id = { $lt: new ObjectId(params.lt_id) }
     } catch (e) {
       e.status = 403
       throw e
@@ -43,27 +46,38 @@ export default async function (ctx) {
     query.black = true
   }
 
-  var results = User.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).populate(User.metaPopulate())
+  let users = User.find(query, undefined, { limit: options.limit + 1, sort: { _id: -1 } }).populate(User.metaPopulate())
   if (tokenUser.get('admin')) {
-    results = results.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({path: 'application', select: {name: 1, slug: 1, content: 1}})
+    users.populate(User.refPopulate('creator'))
+      .populate(User.refPopulate('updater'))
+      .populate({
+        path: 'application',
+        select: {
+          name: 1,
+          slug: 1,
+          content: 1,
+        }
+      })
   }
-  results = await results.exec()
 
-  var more = results.length > options.limit
+  users = await users.exec()
+
+  let more = users.length > options.limit
   if (more) {
-    results.pop()
+    users.pop()
   }
 
-  for (let i = 0; i < results.length; i++) {
-    let value = results[i]
-    value.setToken(token)
-    let result = value.toJSON()
+  let results: User[] = []
+  for (let i = 0; i < users.length; i++) {
+    let user: User = users[i]
+    user.setToken(token)
+    let result: Object = user.toJSON()
     result.cans = {
-      save: await value.can('save'),
-      black: await value.can('black'),
-      restore: await value.can('restore'),
+      save: await user.canBoolean('save'),
+      black: await user.canBoolean('black'),
+      admin: await user.canBoolean('admin'),
     }
-    results[i] = result
+    users.push(result)
   }
-  ctx.vmState({results, more})
+  ctx.vmState({ results, more })
 }

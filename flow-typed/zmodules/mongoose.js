@@ -1,7 +1,8 @@
+/* @flow */
 // flow-typed signature: 7ffdb950e38e108e10ecb4fc71719c4f
 // flow-typed version: ff3b55f28f/mongoose_v4.x.x/flow_>=v0.50.x
 
-import mongoose from "mongoose";
+import mongoose from 'mongoose'
 
 type MongoId =
   | typeof mongoose.Types.ObjectId
@@ -169,7 +170,7 @@ type Mongoose$SchemaField<Schema> = {
 };
 
 declare class Mongoose$SchemaVirtualField {
-  get(() => any): this,
+  get(() => any): this;
   set((value: any) => any): this
 }
 
@@ -232,7 +233,7 @@ declare class Mongoose$Document {
     update: Object,
     options?: Object
   ): Promise<UpdateResult> & { exec(): Promise<UpdateResult> },
-  static create(doc: $Shape<this> | Array<$Shape<this>>): Promise<this>,
+  static create(doc: Object | Array<Object>): Promise<this>,
   static where(criteria?: Object): Mongoose$Query<this, this>,
   static aggregate(pipeline: Object[]): Promise<any>,
   static bulkWrite(ops: Object[]): Promise<any>,
@@ -249,6 +250,7 @@ declare class Mongoose$Document {
   static schema: Mongoose$Schema<this>,
   static on(type: string, cb: Function): void,
 
+
   constructor(data?: $Shape<this>): this,
   id: string | number,
   _id: MongoOrScalarId,
@@ -259,7 +261,7 @@ declare class Mongoose$Document {
   set(path: string, val: any, type?: any, options?: Object): this,
   isSelected(fieldName: string): boolean,
   validate(opts?: Object): Promise<*>,
-  validateSync(pathsToValidate: string | string[]): Error | void,
+  validateSync(pathsToValidate?: string | string[]): Error | void,
   errors: Object,
   isNew: boolean,
   schema: Mongoose$Schema<this>,
@@ -267,7 +269,7 @@ declare class Mongoose$Document {
   $ignore(path: string): void,
   $isDefault(path: string): boolean,
   depopulate(path: string): this,
-  equals(doc: Mongoose$Document): boolean,
+  equals(doc: Mongoose$Document | MongoOrScalarId): boolean,
   get(path: string, type?: Object): any,
 
   inspect(): Object,
@@ -280,21 +282,21 @@ declare class Mongoose$Document {
   isDirectModified(path: string): boolean,
   isDirectSelected(path: string): boolean,
   isInit(path: string): boolean,
-  isModified(path?: string): boolean,
+  isModified(path?: string | string[]): boolean,
   isSelected(path: string): boolean,
   markModified(path: string): void,
   modifiedPaths(): string[],
 
-  populate(path?: string | Object, cb?: (err: Error, doc: this) => void): void,
+  populate(path?: string | Object, cb?: (err: Error, doc: this) => void): this,
   execPopulate(): Promise<this>,
   populated(path: string): ?MongoOrScalarId,
-  toJSON(options: ToObjectOpts<this>): Object,
-  toObject(options: ToObjectOpts<this>): Object,
+  toJSON(options?: ToObjectOpts<this>): Object,
+  toObject(options?: ToObjectOpts<this>): Object,
   toString(): string,
   unmarkModified(path: string): void,
 
   increment(): void,
-  remove(): Promise<this>
+  remove(): Promise<this>,
 }
 
 type ValidationError = Object;
@@ -373,17 +375,12 @@ declare class Mongoose$Query<Result, Doc> extends Promise<Result> {
   populate(path: string): Mongoose$Query<Result, Doc>,
   populate(obj: {
     path: string,
-    select?: string,
+    select?: MongooseProjection,
     match?: Object,
     options?: Object
   }): Mongoose$Query<Result, Doc>,
   read(
-    pref:
-      | "primary"
-      | "secondary"
-      | "primaryPreferred"
-      | "secondaryPreferred"
-      | "nearest",
+    pref: | "primary" | "secondary" | "primaryPreferred" | "secondaryPreferred" | "nearest",
     tags?: Object[]
   ): Mongoose$Query<Result, Doc>,
   selected(): boolean,
@@ -476,7 +473,7 @@ declare class Mongoose$Connection {
   getMaxListeners(): number
 }
 
-declare module "mongoose" {
+declare module 'mongoose' {
   declare export type MongooseConnection = Mongoose$Connection;
   declare export type MongoId = MongoId;
   declare export type MongoOrScalarId = MongoOrScalarId;
@@ -494,10 +491,11 @@ declare module "mongoose" {
     Schema: typeof Mongoose$Schema,
     Promise: any,
     Document: Mongoose$Document,
+    Error: Object,
     model: $PropertyType<Mongoose$Connection, "model">,
     createConnection(): Mongoose$Connection,
     set: (key: string, value: string | Function | boolean) => void,
-    connect: Function,
+    connect(uri: string, opts?: ConnectionConnectOpts): Mongoose$Connection,
     connection: Mongoose$Connection,
     Query: typeof Mongoose$Query,
   };

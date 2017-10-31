@@ -1,29 +1,38 @@
-import * as validator from 'models/validator';
+/* @flow */
 import User from 'models/user'
 import Auth from 'models/auth'
 
-export default async function(ctx) {
-  var params = {
+import type { Context } from 'koa'
+
+export default async function (ctx: Context) {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  var username = String(params.username || '').trim()
+  let username = String(params.username || '').trim()
 
   if (!username) {
-    ctx.throw('帐号不能为空', 403)
+    ctx.throw(403, 'incorrect', { path: 'username' })
   }
 
-  var user = await User.findByAuth(username)
+  let user: ?User = await User.findByAuth(username)
 
   if (!user) {
-    ctx.throw('用户不存在', 404)
+    ctx.throw(403, 'notexist', { path: 'user' })
+    return
   }
 
-  var auths = await Auth.find({user, column: {$in:['email', 'phone']}, deletedAt: {$exists: false}}).exec();
+  let auths: Auth[] = await Auth.find({
+    user,
+    column: {
+      $in: ['email', 'phone']
+    },
+    deletedAt: { $exists: false }
+  }).exec()
 
   ctx.vmState({
     ...user.toJSON(),
-    auths: auths.toJSON(),
+    auths,
   })
 }

@@ -1,27 +1,32 @@
+/* @flow */
 import { Types } from 'mongoose'
 import Auth from 'models/auth'
 
 
 const ObjectId = Types.ObjectId
 
-export default async function (ctx, next) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
+import type { Context } from 'koa'
+import type User from 'models/user'
+import type Token from 'models/token'
 
-  var params = {...ctx.query}
+export default async function (ctx: Context) {
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let tokenUser: User = token.get('user')
+
+  let params = { ...ctx.query }
   await (new Auth({
     _id: '594e210d5cc916fe9dabccdb',
     user,
-  })).setToken(token).canThrow('list')
+  })).setToken(token).can('list')
 
-  var query = {}
-  var options = {
+  let query = {}
+  let options = {
     limit: 50,
   }
 
   if (params.limit && params.limit <= 100 && params.limit >= 1) {
-    options.limit = parseInt(params.limit)
+    options.limit = parseInt(params.limit, 10)
   }
 
   if (user) {
@@ -37,36 +42,37 @@ export default async function (ctx, next) {
     query.value = String(params.value)
   }
 
-  query.deletedAt = {$exists: params.deleted && tokenUser.get('admin') ? true : false}
+  query.deletedAt = { $exists: params.deleted && tokenUser.get('admin') ? true : false }
 
 
   if (params.lt_id) {
     try {
-      query._id = {$lt:new ObjectId(params.lt_id)};
+      query._id = { $lt: new ObjectId(params.lt_id) }
     } catch (e) {
       e.status = 403
       throw e
     }
   }
 
-  var results = await Auth.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).exec()
+  let auths = await Auth.find(query, undefined, { limit: options.limit + 1, sort: { _id: -1 } }).exec()
 
-  var more = results.length > query.limit
+  let more = auths.length > query.limit
   if (more) {
-    results.pop()
+    auths.pop()
   }
 
-  for (let i = 0; i < results.length; i++) {
-    let value = results[i];
-    value.setToken(token)
-    let result = value.toJSON()
+  let results = []
+  for (let i = 0; i < auths.length; i++) {
+    let auth = auths[i]
+    auth.setToken(token)
+    let result = auth.toJSON()
     result.cans = {
-      save: await value.can('save'),
-      delete: await value.can('delete'),
-      verification: await value.can('verification'),
+      save: await auth.can('save'),
+      delete: await auth.can('delete'),
+      verification: await auth.can('verification'),
     }
-    results[i] = result
+    results.push(result)
   }
 
-  ctx.vmState({results, more})
+  ctx.vmState({ results, more })
 }

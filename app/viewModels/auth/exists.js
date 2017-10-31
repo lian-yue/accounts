@@ -1,29 +1,31 @@
+/* @flow */
 import Auth from 'models/auth'
 
-export default async function(ctx) {
+import type { Context } from 'koa'
+export default async function (ctx: Context) {
   if (Object.keys(ctx.query).length > 10) {
-    ctx.throw('查询字段数过多', 403)
+    ctx.throw(403, 'minimum', { path: 'query' })
   }
 
-  var result = {}
+  let result: {[string]: boolean} = {}
 
-  for (var column in ctx.query) {
-    var value =  ctx.query[column].toLowerCase().trim()
-    if (!column || column.substr(0, 1) == '_' || column.substr(0, 1) == '-' || column.indexOf('token') != -1 || !value) {
-      continue;
+  for (let column in ctx.query) {
+    let value = ctx.query[column].toLowerCase().trim()
+    if (!column || column.charAt(0) === '_' || column.charAt(0) === '-' || column.indexOf('token') !== -1 || !value) {
+      continue
     }
 
-    var query = {
+    let query = {
       column,
       value,
-      deletedAt: {$exists: false},
+      deletedAt: { $exists: false },
     }
 
-    if (column == 'username') {
+    if (column === 'username') {
       delete query.deletedAt
     }
 
-    result[column] = !!(await Auth.findOne(query).exec())
+    result[column] = Boolean(await Auth.findOne(query).exec())
   }
-  ctx.vmState(result);
+  ctx.vmState(result)
 }

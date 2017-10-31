@@ -1,14 +1,20 @@
 /* @flow */
-import {Schema} from 'mongoose'
+import { Schema, Error as MongooseError, type MongoId } from 'mongoose'
 
-import ip from 'ip'
+import locale from './locale/default'
+import createError from './createError'
+
+import { matchIP, hideIP } from './utils'
 
 import model from './model'
 
+import type { Context } from 'koa'
 
-const schema = new Schema({
+
+const schema: Schema<TokenModel> = new Schema({
   secret: {
     type: String,
+    required: true,
     default() {
       return require('./application').default.createRandom(8, true)
     },
@@ -23,26 +29,42 @@ const schema = new Schema({
   scopes: [
     {
       type: String,
-      required: [true, '权限名称不能为空 ({PATH})'],
-      maxlength: [64, '权限名称长度不能大于 64 字节 ({PATH})'],
+      required: true,
+      maxlength: 64,
       validate: [
         {
           validator(scope) {
-            return this.get('scopes').length <= 32
+            let value: number = this.get('scopes').length
+            if (value <= 32) {
+              return true
+            }
+            this.invalidate('scopes', new MongooseError.ValidatorError({
+              path: 'scopes',
+              maximum: 32,
+              type: 'maximum',
+              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              value,
+            }))
           },
-          message: '权限数量不能大于 32 个 ({PATH})',
-        },
-        {
-          validator(scope) {
-            return scope
-          },
-          message: '"{VALUE}" 权限格式不正确 ({PATH})',
         },
       ],
     }
   ],
 
   renewal: {
+    type: Boolean,
+    default() {
+      if (this.get('type') === 'refresh') {
+        return true
+      }
+      if (this.get('client')) {
+        return true
+      }
+      return false
+    },
+  },
+
+  client: {
     type: Boolean,
     default: false,
   },
@@ -90,16 +112,16 @@ const schema = new Schema({
       let date = new Date
       switch (this.get('type')) {
         case 'code':
-          date.setTime(date.getTime() + 1000 * 300)
+          date.setTime(date.getTime() + 1000 * 600)
           break
         case 'refresh':
-          date.setTime(date.getTime() + 1000 * 86400 * 60)
+          date.setTime(date.getTime() + 1000 * 86400 * 1)
           break
         default:
-          if (this.get('application')) {
-            date.setTime(date.getTime() + 1000 * 86400 * 1)
-          } else {
+          if (this.get('renewal')) {
             date.setTime(date.getTime() + 1000 * 86400 * 30)
+          } else {
+            date.setTime(date.getTime() + 1000 * 86400 * 1)
           }
       }
       return date
@@ -120,10 +142,11 @@ const schema = new Schema({
         default: '0.0.0.0',
         validate: [
           {
+            type: 'match',
+            message: locale.getLanguagePackValue(['errors', 'match']),
             validator(value) {
-              return ip.isV4Format(value) || ip.isV6Format(value)
+              return !!matchIP(value)
             },
-            message: '"{VALUE}" 不是 IP 地址 ({PATH})',
           },
         ],
       },
@@ -141,7 +164,7 @@ const schema = new Schema({
 })
 
 schema.virtual('userAgent').get(function () {
-  let logs = this.get('logs')
+  let logs: Object[] = this.get('logs')
   if (!logs.length) {
     return
   }
@@ -149,7 +172,7 @@ schema.virtual('userAgent').get(function () {
 })
 
 schema.virtual('ip').get(function () {
-  let logs = this.get('logs')
+  let logs: Object[] = this.get('logs')
   if (!logs.length) {
     return '0.0.0.0'
   }
@@ -157,7 +180,7 @@ schema.virtual('ip').get(function () {
 })
 
 schema.virtual('expires_in').get(function () {
-  let time = this.get('expiredAt') - Date.now()
+  let time: number = this.get('expiredAt') - Date.now()
   if (time < 1000) {
     return 0
   }
@@ -175,31 +198,31 @@ schema.virtual('scope').get(function () {
 
 
 schema.methods.canScope = async function canScope(
-  token?: {modelName: 'Token'},
+  token?: TokenModel,
   {
-    path: optPath,
-    client,
-    application: optApplication,
+    path: optPath = '/',
+    admin: optAdmin = false,
+    client: optClient = true,
+    application: optApplication = true,
   }: {
-    path: string | string[],
+    path: string,
+    admin: boolean,
     client: boolean,
     application: boolean,
   } = {
-    path: '/',
-    client: true,
-    application: true
   }
-): Promise<void> {
-  let path: string | string[] = optPath
-  if (path instanceof Array) {
-    path = path.join('/')
+) {
+  if (token && !this.equals(token)) {
+    throw createError(500, 'incorrect', { path: 'token', value: token.get('id') })
   }
+
+  let path: string = optPath
   if (!path || path.charAt(0) === '/' || path.indexOf('\\') !== -1 || path.indexOf('//') !== -1) {
-    this.throw(500, '`path` is incorrect')
+    throw createError(403, 'incorrect', { path: 'path', value: path })
   }
 
   path = path.replace(/\*\*/g, '*/*')
-  let scopes = this.get('scopes')
+  let scopes: string[] = this.get('scopes')
   let scope
   let test
   for (let i = 0; i < scopes.length; i++) {
@@ -209,65 +232,107 @@ schema.methods.canScope = async function canScope(
       break
     }
   }
+
   if (!test) {
-    this.throw(400, '`scope` does not match')
+    throw createError(400, 'match', { path: 'scope', value: path })
   }
 
-  if (optApplication && this.get('application')) {
-    let application = this.get('application')
-    if (!application.get) {
-      application = await require('./application').default.findById(application).exec()
-    }
-    await application.canScope(this, {path: optPath, client})
+  if (optClient && this.get('client')) {
+    // client
+  } else if (optApplication && this.get('application')) {
+    await this.get('application').canScope(this, { path: optPath })
+  }
+
+  if (optAdmin) {
+    await this.canScope(this, { path: 'admin', client: optClient, application: optApplication })
   }
 }
 
-schema.methods.canUser = async function canUser(token?: {modelName: 'Token'}, {value}: {value: boolean | {modelName: 'User'}}) {
-  let user = this.get('user')
+schema.methods.canUser = async function canUser(
+  token?: TokenModel,
+  {
+    value,
+    admin = false,
+    black = admin,
+  }: {
+    value: boolean | UserModel | MongoId | string,
+    admin: boolean,
+    black: boolean,
+  } = {
+  }
+) {
+
+  if (token && !this.equals(token)) {
+    throw createError(500, 'incorrect', { path: 'token', value: token.get('id') })
+  }
+
+  let user: ?UserModel = this.get('user')
+  if (!user) {
+    if (admin || black || value) {
+      throw createError(401, 'notlogged')
+    } else {
+      return
+    }
+  }
+
+  if (value === undefined || value === null) {
+    // empty
+  } else if (typeof value !== 'boolean') {
+    // $flow-disable-line
+    if (!user.equals(value)) {
+      throw createError(403, 'incorrect', { path: 'user', value: typeof value.get === 'function' ? value.get('id') : String(value) })
+    }
+  } else {
+    if (user) {
+      throw createError(403, 'haslogged')
+    }
+  }
+
+  if (admin) {
+    await user.canHasAdmin(this)
+  }
+
+  if (black) {
+    await user.canNotBlack(this)
+  }
+}
+
+
+schema.methods.canApplication = async function canApplication(token?: TokenModel, { value }: { value: boolean | MongoId | ApplicationModel }) {
+  if (token && !this.equals(token)) {
+    throw createError(500, 'incorrect', { path: 'token', value: token.get('id') })
+  }
+  let application: ?ApplicationModel = this.get('application')
   if (typeof value === 'boolean') {
-    if (Boolean(user) !== value) {
-      if (value) {
-        this.throw(401, 'Not logged in')
+    if (Boolean(application) !== value) {
+      if (!application) {
+        throw createError(400, 'required', { path: 'application' })
       } else {
-        this.throw(403, 'You are logged in')
+        throw createError(400, 'incorrect', { path: 'application', value: application.get('id') })
       }
     }
   } else {
-    if (!user) {
-      this.throw(401, 'Not logged in')
-    } else if (!user.equals(value)) {
-      this.throw(403, 'You do not have permission')
+    if (!application) {
+      throw createError(400, 'required', { path: 'application' })
+    }
+    if (!application.equals(value)) {
+      throw createError(400, 'incorrect', { path: 'application', value: application.get('id') })
     }
   }
 }
 
 
-schema.methods.canApplication = async function canApplication(token?: {modelName: 'Token'}, {value}: {value: boolean | {modelName: 'Application'}}) {
-  let application = this.get('application')
-  if (typeof value === 'boolean') {
-    if (Boolean(application) !== value) {
-      this.throw(400, 'Token application is incorrect')
-    }
-  } else {
-    if (!application || !application.equals(value)) {
-      this.throw(400, 'Token application is incorrect')
-    }
-  }
-}
-
-
-
-schema.methods.updateLog = function updateLog(ctx, server: boolean = false): boolean {
-  let logIp
-  let userAgent
+schema.methods.updateLog = function updateLog(ctx: Context, server: boolean = false): boolean {
+  let ip
+  let userAgent: string
   if (server) {
-    logIp = require('./application').default.forwardIp(ctx)
-    if (!logIp) {
+    ip = require('./application').default.forwardIp(ctx)
+    if (!ip) {
       return false
     }
     userAgent = require('./application').default.forwardUserAgent(ctx, '')
   } else {
-    logIp = ctx.ip
+    ip = ctx.ip
     userAgent = ctx.request.header['user-agent'] || ''
   }
   userAgent = userAgent.trim()
@@ -280,7 +345,7 @@ schema.methods.updateLog = function updateLog(ctx, server: boolean = false): boo
     return false
   }
 
-  logs.push({ip: logIp, userAgent})
+  logs.push({ ip, userAgent })
 
 
   if (logs.length > 5) {
@@ -315,22 +380,13 @@ schema.methods.updateLog = function updateLog(ctx, server: boolean = false): boo
 
 schema.set('toJSON', {
   virtuals: true,
-  transform(doc, ret) {
+  transform(doc: TokenModel, ret) {
     delete ret.secret
     delete ret.parent
     delete ret.state
     delete ret.logs
 
-
-    let separator = ret.ip.indexOf(':') === -1 ? '.' : ':'
-    let retIp = ret.ip.split(separator)
-    if (retIp.length <= 4) {
-      retIp[retIp.length - 1] = '*'
-    } else {
-      retIp[retIp.length - 1] = '*'
-      retIp[retIp.length - 2] = '*'
-    }
-    ret.ip = retIp.join(separator)
+    ret.ip = hideIP(ret.ip)
   },
 })
 
@@ -346,8 +402,8 @@ schema.pre('save', function (next) {
 })
 
 
-export default model('Token', schema, {
+export default (model('Token', schema, {
   shardKey: {
     _id: 1,
   },
-})
+}): Class<TokenModel>)

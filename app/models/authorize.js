@@ -1,14 +1,17 @@
 /* @flow */
-import {Schema} from 'mongoose'
+import { Schema, Error as MongooseError, type MongoId } from 'mongoose'
+
+import locale from './locale/default'
+
+import createError from './createError'
 
 import model from './model'
 
-import Token from './token'
-
 import Role from './role'
 
+
 // 授权信息
-const schema = new Schema({
+const schema: Schema<AuthorizeModel> = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     index: true,
@@ -32,23 +35,37 @@ const schema = new Schema({
         validate: [
           {
             validator(role) {
-              return this.get('roles').length <= 8
+              let parent = this.parent()
+              let value = parent.get('roles').length
+              if (value <= 8) {
+                return true
+              }
+              parent.invalidate('roles', new MongooseError.ValidatorError({
+                path: 'roles',
+                maximum: 8,
+                type: 'maximum',
+                message: locale.getLanguagePackValue(['errors', 'maximum']),
+                value,
+              }))
             },
-            message: '用户角色不能大于 8 个',
           },
           {
             isAsync: true,
             async validator(id) {
+              let parent = this.parent()
+              if (!parent.$isValid('roles')) {
+                return true
+              }
               let role = await Role.findById(id).read('primary').exec()
-              return role && role.get('application').equals(this.get('application'))
+              return role && role.get('application').equals(parent.get('application'))
             },
-            message: '用户角色不存在',
+            message: locale.getLanguagePackValue(['errors', 'notexist']),
           },
         ],
       },
       reason: {
         type: String,
-        maxlength: [255, '用户角色给予理由不能超过 255 字节'],
+        maxlength: 255,
       },
       createdAt: {
         type: Date,
@@ -78,136 +95,126 @@ const schema = new Schema({
   },
 })
 
-schema.index({user: 1, application: 1}, {unique: true})
+schema.index({ user: 1, application: 1 }, { unique: true })
 
 
 
-schema.methods.canNotDelete = async function canNotDelete(token?: Token) {
-  if (this.get('deletedAt')) {
-    this.throw(404, 'Authorize does not exist')
+schema.methods.canNotDelete = async function canNotDelete(token?: TokenModel) {
+  if (!this.get('deletedAt')) {
+    return
   }
+  throw createError(404, 'notexist', { path: 'authorize' })
 }
 
-schema.methods.canList = async function canList(token?: Token) {
+schema.methods.canList = async function canList(token?: TokenModel, { deletedAt = false }: {deletedAt: boolean} = {}) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'authorize/list'})
+  await token.canUser(token, { value: true })
 
-  let tokenUser = token.get('user')
+  let user: UserModel = this.get('user')
 
-  if (!tokenUser.equals(this.get('user')) || this.get('deletedAt')) {
-    await token.canScope(token, {path: 'admin'})
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
-}
+  let admin: boolean = !user.equals(this.get('user')) || this.get('deletedAt') || deletedAt
 
-schema.methods.canRead = async function canRead(token?: Token) {
-  if (!token) {
-    return this.throwTokenNotExists()
-  }
-  await token.canUser(token, {value: true})
-  let application = token.get('application')
-  if (!application || !application.equals(this.get('application'))) {
-    await token.canScope(token, {path: 'authorize/read'})
-  }
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-
-  if (!tokenUser.get('admin')) {
-    await this.canNotDelete()
-  }
-
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canScope(token, { path: 'authorize/list', admin })
+  await token.canUser(token, { value: true, admin })
 }
 
 
-schema.methods.canSave = async function canSave(token?: Token) {
+schema.methods.canRead = async function canRead(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
-  }
-  await token.canUser(token, {value: true})
-  let application = token.get('application')
-  if (!application || !application.equals(this.get('application'))) {
-    await token.canScope(token, {path: 'authorize/save'})
+    throw createError(400, 'required', { path: 'token' })
   }
 
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = this.get('user')
+
+
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'authorize/read', admin })
   }
 
-  if (!tokenUser.get('admin')) {
-    await this.canNotDelete()
+  if (this.get('deletedAt') && (user.get('black') || !user.get('admin'))) {
+    await this.canNotDelete(token)
   }
 
-  await tokenUser.canNotBlock(token)
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
+  admin = admin || this.get('deletedAt')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'authorize/read', admin })
   }
+  await token.canUser(token, { value: true, admin })
 }
 
 
-schema.methods.canClear = async function canClear(token?: Token) {
+schema.methods.canSave = async function canSave(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
+  await token.canUser(token, { value: true })
 
-  await token.canScope(token, {path: 'authorize/clear'})
+  let user: UserModel = this.get('user')
 
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'authorize/save', admin })
   }
-  await tokenUser.canNotBlock(token)
-
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
-  }
-}
-
-
-schema.methods.canDelete = async function canDelete(token?: Token) {
-  if (!token) {
-    return this.throwTokenNotExists()
-  }
-  await token.canUser(token, {value: true})
-
-  let application = token.get('application')
-  if (!application || !application.equals(this.get('application'))) {
-    await token.canScope(token, {path: 'authorize/delete'})
-  }
-
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-  await tokenUser.canNotBlock(token)
 
   await this.canNotDelete(token)
 
+  await token.canUser(token, { value: true, black: true, admin })
+}
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
+
+schema.methods.canClear = async function canClear(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
   }
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+
+  await token.canScope(token, { path: 'authorize/clear', admin })
+  await token.canUser(token, { value: true, black: true, admin })
+}
+
+
+schema.methods.canDelete = async function canDelete(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'authorize/delete', admin })
+  }
+
+  await this.canNotDelete(token)
+
+  await token.canUser(token, { value: true, black: true, admin })
 }
 
 
 
-schema.statics.findOneCreate = async function findOneCreate(user, application): Promise<Object> {
+schema.statics.findOneCreate = async function findOneCreate(user: MongoId | UserModel, application: MongoId | ApplicationModel): Promise<AuthorizeModel> {
   //  创建 authorize
-  let authorize = await this.findOne({
+  let authorize: ?AuthorizeModel = await this.findOne({
     user,
     application,
   }).exec()
+
+  let now = new Date
 
   if (!authorize) {
     authorize = new this({
@@ -215,11 +222,11 @@ schema.statics.findOneCreate = async function findOneCreate(user, application): 
       application,
     })
   } else if (authorize.get('deletedAt')) {
-    authorize.set('createdAt', new Date)
+    authorize.set('createdAt', now)
     authorize.set('deletedAt', undefined)
   }
 
-  authorize.set('updatedAt', new Date)
+  authorize.set('updatedAt', now)
   await authorize.save()
   return authorize
 }
@@ -239,10 +246,10 @@ schema.pre('save', function (next) {
     await require('./token').default.updateMany({
       user: this,
       application: this.get('application'),
-      deletedAt: {$exists: false}
+      deletedAt: { $exists: false }
     },
     {
-      $set: {deletedAt: new Date}
+      $set: { deletedAt: new Date }
     },
     {
       w: 0
@@ -251,4 +258,4 @@ schema.pre('save', function (next) {
   next()
 })
 
-export default model('Authorize', schema, {strict: false})
+export default (model('Authorize', schema, { strict: false }): Class<AuthorizeModel>)

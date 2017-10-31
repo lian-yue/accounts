@@ -1,18 +1,24 @@
+/* @flow */
 import Application from 'models/application'
-export default async function (ctx, next) {
-  var user = ctx.state.user
+
+import type { Context } from 'koa'
+import type User from 'models/user'
+export default async function (ctx: Context, next: () => Promise<void>) {
+  let user: ?User = ctx.state.user
   if (ctx.params.application) {
+    let application: ?Application
     if (/^[0-9a-z]{24}$/.test(ctx.params.application)) {
-      var application = await Application.findById(ctx.params.application).exec()
+      application = await Application.findById(ctx.params.application).exec()
     } else {
-      var application = await Application.findOne({slug: ctx.params.application}).exec()
+      application = await Application.findOne({ slug: ctx.params.application }).exec()
     }
     ctx.state.applicationState = application
-    if (!ctx.state.applicationState) {
-      ctx.throw('应用不存在', 404)
+    if (!application) {
+      ctx.throw(404, 'notexist', { path: 'application' })
+      return
     }
-    if (user && !application.get('creator').equals(user)) {
-      ctx.throw('应用不存在', 404)
+    if (user && !user.equals(application.get('creator'))) {
+      ctx.throw(404, 'notexist', { path: 'application' })
     }
   } else {
     delete ctx.state.applicationState

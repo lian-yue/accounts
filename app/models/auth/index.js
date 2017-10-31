@@ -1,13 +1,20 @@
 /* @flow */
-import {Schema} from 'mongoose'
+import { Schema, Error as MongooseError } from 'mongoose'
+
+import oauthConfig from 'config/oauth'
+
+import  { matchEmail, matchMobilePhone } from '../utils'
+
+import locale from '../locale/default'
+
+import createError from '../createError'
+
 import model from '../model'
-import * as validator from '../validator'
-import Token from '../token'
+
 import * as oauths from './oauth'
 
 
-
-const schema = new Schema({
+const schema: Schema<AuthModel> = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     index: true,
@@ -16,8 +23,8 @@ const schema = new Schema({
   },
   column: {
     type: String,
-    required: true,
     index: true,
+    required: true,
   },
   value: {
     type: String,
@@ -27,145 +34,91 @@ const schema = new Schema({
     validate: [
       {
         validator(value) {
-          if (this.get('column') !== 'email') {
+          if (!this.$isValid(this.get('column'))) {
             return true
           }
-          return !!value
+          if (value) {
+            return true
+          }
+          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'required']), value, 'required')
         },
-        message: '电子邮箱不能为空',
       },
       {
         validator(value) {
-          if (this.get('column') !== 'email') {
+          if (!this.$isValid(this.get('column'))) {
             return true
           }
-          let email = validator.email(value)
-          if (!email) {
-            return false
+          switch (this.get('column')) {
+            case 'email': {
+              let email = matchEmail(value)
+              if (email) {
+                this.set('value', email)
+                return true
+              }
+              break
+            }
+            case 'phone': {
+              let phone = matchMobilePhone(value)
+              if (phone) {
+                this.set('value', phone)
+                return true
+              }
+              break
+            }
+            default:
+              return true
           }
-          this.set('value', email)
-          return true
+          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'match']), value, 'match')
         },
-        message: '电子邮箱格式不正确',
       },
       {
         isAsync: true,
         async validator(value) {
-          if (this.get('column') !== 'email' || this.get('deletedAt')) {
+          if (!this.$isValid(this.get('column'))) {
             return true
           }
-          let exists = await Auth.findOne({
-            column: 'email',
-            value,
-            deletedAt: {$exists: false},
-          }).read('primary').exec()
-          return !exists || this.equals(exists)
-        },
-        message: '电子邮箱已存在 "{VALUE}"',
-      },
-      {
-        isAsync: true,
-        async validator(value) {
-          if (this.get('column') !== 'email' || this.get('deletedAt') || !this.isNew) {
+          if (this.get('deletedAt')) {
             return true
           }
-          let results = await Auth.find({
-            user: this.get('user'),
-            column: this.get('column'),
-            deletedAt: {$exists: false},
-          }).exec()
-          return results.length < 2
-        },
-        message: '最多只能绑定 2 个电子邮箱',
-      },
-      {
-        validator(value) {
-          if (this.get('column') !== 'phone') {
-            return true
-          }
-          return !!value
-        },
-        message: '手机号不能为空',
-      },
-      {
-        validator(value) {
-          if (this.get('column') !== 'phone') {
-            return true
-          }
-          let phone = validator.mobilePhone(value)
-          if (!phone) {
-            return false
-          }
-          this.set('value', phone)
-          return true
-        },
-        message: '手机号格式不正确',
-      },
-      {
-        isAsync: true,
-        async validator(value) {
-          if (this.get('column') !== 'phone' || this.get('deletedAt')) {
-            return true
-          }
-          let exists = await Auth.findOne({
-            column: 'phone',
-            value,
-            deletedAt: {$exists: false},
-          }).read('primary').exec()
-          return !exists || this.equals(exists)
-        },
-        message: '手机号已存在 "{VALUE}"',
-      },
-      {
-        isAsync: true,
-        async validator(value) {
-          if (this.get('column') !== 'phone' || this.get('deletedAt') || !this.isNew) {
-            return true
-          }
-          let results = await Auth.find({
-            user: this.get('user'),
-            column: this.get('column'),
-            deletedAt: {$exists: false},
-          }).exec()
-          return results.length < 2
-        },
-        message: '最多只能绑定 2 个手机号',
-      },
-      {
-        validator(value) {
-          return !!value
-        },
-        message: '绑定信息不能为空',
-      },
-      {
-        isAsync: true,
-        async validator(value) {
-          if (['phone', 'email'].indexOf(this.get('column')) !== -1 || this.get('deletedAt')) {
-            return true
-          }
-          let exists = await Auth.findOne({
+
+          let exists: ?AuthModel = await this.constructor.findOne({
             column: this.get('column'),
             value,
-            deletedAt: {$exists: false},
+            deletedAt: { $exists: false },
           }).read('primary').exec()
-          return !exists || this.equals(exists)
+
+          if (!exists || this.equals(exists)) {
+            return true
+          }
+
+          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'hasexist']), value, 'hasexist')
         },
-        message: '该账号已被绑定了',
       },
       {
         isAsync: true,
         async validator(value) {
-          if (['phone', 'email'].indexOf(this.get('column')) !== -1 || this.get('deletedAt') || !this.isNew) {
+          if (!this.$isValid(this.get('column'))) {
             return true
           }
-          let results = await Auth.find({
+          if (this.get('deletedAt') || !this.isNew) {
+            return true
+          }
+          let results: AuthModel[] = await this.constructor.find({
             user: this.get('user'),
             column: this.get('column'),
-            deletedAt: {$exists: false},
+            deletedAt: { $exists: false },
           }).exec()
-          return results.length < 2
+          if (results.length <= 3) {
+            return true
+          }
+          this.invalidate(this.get('column'), new MongooseError.ValidatorError({
+            path: this.get('column'),
+            maximum: 3,
+            type: 'maximum',
+            message: locale.getLanguagePackValue(['errors', 'maximum']),
+            value: results.length,
+          }))
         },
-        message: '最多只能绑定 2 个该类型账号',
       },
     ],
   },
@@ -180,10 +133,6 @@ const schema = new Schema({
     default: Object,
   },
 
-  nickname: {
-    type: Object,
-    default: Object,
-  },
   settings: {
     type: Object,
     default: Object,
@@ -203,96 +152,99 @@ const schema = new Schema({
 })
 
 
-schema.methods.canNotDelete = async function canNotDelete(token?: Token) {
+schema.methods.canNotDelete = async function canNotDelete(token?: TokenModel) {
   if (this.get('deletedAt')) {
-    this.throw(404, 'Auth does not exist')
+    throw createError(404, 'notexist', { path: 'auth' })
   }
 }
 
-schema.methods.canList = async function canList(token?: Token) {
+schema.methods.canList = async function canList(token?: TokenModel, { deletedAt = false }: { deletedAt: boolean } = {}) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'auth/list'})
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-
-  if (!tokenUser.equals(this.get('user')) || this.get('deletedAt')) {
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canUser(token, { value: true })
+  let user: UserModel = token.get('user')
+  let admin: boolean = this.get('deletedAt') || deletedAt || !user.equals(this.get('user'))
+  await token.canScope(token, { path: 'auth/list', admin })
+  await token.canUser(token, { value: true, admin })
 }
 
 
-schema.methods.canRead = async function canRead(token?: Token) {
+schema.methods.canRead = async function canRead(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'auth/read'})
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  await token.canUser(token, { value: true })
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+
+  await token.canScope(token, { path: 'auth/read', admin })
+
+  if (this.get('deletedAt') && (user.get('black') || !user.get('admin'))) {
+    await this.canNotDelete(token)
   }
 
-  if (this.get('deletedAt') && !tokenUser.get('admin')) {
-    await this.canNotDelete()
-  }
+  admin = admin || this.get('deletedAt')
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canScope(token, { path: 'auth/read', admin })
+  await token.canUser(token, { value: true, admin })
 }
 
-schema.methods.canSave = async function canSave(token?: Token) {
+
+schema.methods.canSave = async function canSave(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'auth/save'})
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-  await tokenUser.canNotBlock(token)
-  await this.canNotDelete()
+  await token.canUser(token, { value: true })
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
-  }
-}
+  await token.canScope(token, { path: 'auth/save', admin })
 
-schema.methods.canDelete = async function canDelete(token?: Token, {verification}: {verification: boolean} = {verification: false}) {
-  if (!token) {
-    return this.throwTokenNotExists()
-  }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'auth/delete'})
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-  await tokenUser.canNotBlock(token)
-  await this.canNotDelete()
+  await this.canNotDelete(token)
 
-  if (this.get('column') === 'username') {
-    this.throw(403, 'Can not delete username')
-  }
+  await token.canUser(token, { value: true, black: true, admin })
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
-  }
-
-  if (!verification) {
-    // not verification
-  } else if (tokenUser.equals(this.get('user'))) {
-    this.throw(403, this.get('column') === 'phone' || this.get('column') === 'email' ? 'Requires verification code' : 'Need to verify the password')
+  let column: string = this.get('column')
+  if (column === 'username') {
+    throw createError(403, 'match', { path: 'column' })
+  } else if (column === undefined || column === 'email' || column === 'phone' || oauthConfig[column] || !this.isNew) {
+    // true
   } else {
-    await tokenUser.canHasAdmin(token)
+    throw createError(403, 'match', { path: 'column' })
+  }
+}
+
+schema.methods.canDelete = async function canDelete(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+
+  await token.canScope(token, { path: 'auth/delete', admin })
+
+  await this.canNotDelete(token)
+
+  await token.canUser(token, { value: true, black: true, admin })
+
+  let column: string = this.get('column')
+
+  if (column === 'username') {
+    throw createError(403, 'match', { path: 'column' })
+  } else if (column === 'email' || column === 'phone') {
+    if (!admin && !await this.constructor.findOne({ user: this.get('user'), _id: { $ne: this.get('_id') }, column, deletedAt: { $exists: false } }).exec()) {
+      throw createError(403, 'minimum', { minimum: 1, path: column })
+    }
+  } else if (oauthConfig[column]) {
+    if (!admin && !user.get('password')) {
+      throw createError(403, 'permission')
+    }
+  } else {
+    throw createError(403, 'match', { path: 'column' })
   }
 }
 
@@ -351,7 +303,7 @@ function emailDisplay(value) {
  */
 schema.set('toJSON', {
   virtuals: true,
-  transform(doc, ret) {
+  transform(doc: AuthModel, ret) {
     delete ret.value
     delete ret.token
     delete ret.state
@@ -375,7 +327,7 @@ schema.pre('save', function (next) {
  * @return {[type]} [description]
  */
 schema.pre('save', async function () {
-  let column = this.get('column')
+  let column: string = this.get('column')
   if (column === 'username') {
     return
   }
@@ -383,9 +335,9 @@ schema.pre('save', async function () {
     return
   }
   const User = require('../user').default
-  let auth
+  let auth: AuthModel
   if (this.get('deletedAt')) {
-    auth = await Auth.findOne({
+    auth = await this.constructor.findOne({
       user: this.get('user'),
       column,
       _id: {
@@ -400,8 +352,11 @@ schema.pre('save', async function () {
   }
 
   let user = await User.findById(this.get('user')).read('primary').exec()
+  if (!user) {
+    return
+  }
 
-  let auths = user.get('auths')
+  let auths: string[] = user.get('auths')
   let index = auths.indexOf(column)
   if (auth) {
     if (index === -1) {
@@ -414,13 +369,12 @@ schema.pre('save', async function () {
   }
 
   if (user.isModified('auths')) {
-    this.savePost(user)
+    this.oncePost(user)
   }
 })
 
-schema.statics.oauths = oauths
+for (let key in oauths) {
+  schema.statics[key] = oauths[key]
+}
 
-
-const Auth = model('Auth', schema)
-
-export default Auth
+export default (model('Auth', schema): Class<AuthModel>)

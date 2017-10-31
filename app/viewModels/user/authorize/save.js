@@ -1,16 +1,24 @@
+/* @flow */
 import { Types } from 'mongoose'
 import Role from 'models/role'
 
+
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Authorize from 'models/authorize'
+
 const ObjectId = Types.ObjectId
-export default async function (ctx) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  var authorize = ctx.state.authorize
-  await authorize.setToken(token).canThrow('save')
 
+export default async function (ctx: Context) {
+  let token: Token = ctx.state.token
+  let authorize: Authorize  = ctx.state.authorize
+  await authorize.setToken(token).can('save')
 
-  var params = {...ctx.query, ...ctx.request.body}
+  let params = {
+    ...ctx.request.query,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
+  }
+
   delete params.cans
   delete params.user
   delete params.application
@@ -20,15 +28,15 @@ export default async function (ctx) {
 
   for (let key in params) {
     let value = params[key]
-    if (!key || key == 'roles' || /^[a-z][0-9a-zA-Z]*$/.test(key) || value === null || value === void 0 || typeof value === 'object') {
+    if (!key || key === 'roles' || /^[a-z][0-9a-zA-Z]*$/.test(key) || typeof value === 'object') {
       continue
     }
-    authorize.set(name, value === null || value === void 0 ? void 0 : String(value))
+    authorize.set(key, value === null || value === undefined ? undefined : value)
   }
 
-  if (params.roles !== void 0 && params.roles !== null) {
+  if (params.roles !== undefined && params.roles !== null) {
     let roles = []
-    if (typeof params.roles == 'string') {
+    if (typeof params.roles === 'string') {
       try {
         roles = JSON.parse(params.roles)
       } catch (e) {
@@ -38,9 +46,14 @@ export default async function (ctx) {
     } else if (params.roles instanceof Array) {
       roles = params.roles
     }
+    if (!Array.isArray(roles)) {
+      ctx.throw(403, 'match', { path: 'roles' })
+      return
+    }
 
     if (roles.length > 32) {
-      ctx.throw('用户角色不能大于 8 个', 403)
+      ctx.throw(403, 'maximum', { path: 'roles', maximum: 8 })
+      return
     }
 
     let oldMaps = {}
@@ -51,12 +64,19 @@ export default async function (ctx) {
 
     let newRoles = []
     for (let i = 0; i < roles.length; i++) {
-      let role = roles[i]
-      if (!role.role) {
+      let role: Object = roles[i]
+      if (!role || typeof role !== 'object' || !role.role) {
         continue
       }
-      let id = String(obj.role._id || obj.role.id || obj.role || '')
-      let name = obj.role.name || id
+      let id: string | ObjectId
+      let name: string
+      if (typeof role.role === 'object') {
+        id = String(role.role._id || role.role.id)
+        name = role.role.name || id
+      } else {
+        id = String(role.role)
+        name = id
+      }
       if (!id) {
         continue
       }
@@ -68,15 +88,18 @@ export default async function (ctx) {
       }
       role.role = await Role.findById(id).exec()
       if (!role.role) {
-        ctx.throw(`"${name}" role does not exist`, 403)
+        ctx.throw(403, 'notexist', { path: 'role', value: name })
+        return
       }
       if (!role.role.get('application').equals(authorize.get('application'))) {
-        ctx.throw(`"${role.role.get('name')}" role does not exist`, 403)
+        ctx.throw(403, 'notexist', { path: 'role', value: role.role.get('name') })
+        return
       }
 
       let old = oldMaps[role.role.get('id')]
       if (role.role.get('deletedAt') && !old) {
-        ctx.throw(`"${role.role.get('name')}" role does not exist`, 403)
+        ctx.throw(403, 'notexist', { path: 'role', value: role.role.get('name') })
+        return
       }
 
       delete role.id
@@ -86,11 +109,11 @@ export default async function (ctx) {
         if (isNaN(role.expiredAt)) {
           role.expiredAt = new Date
         }
-      } else if (role.expiredAt !== void 0) {
-        role.expiredAt = void 0
+      } else if (role.expiredAt !== undefined) {
+        role.expiredAt = undefined
       }
       if (old) {
-        role = {...old, ...role}
+        role = { ...old, ...role }
       }
       newRoles.push(role)
     }
@@ -98,5 +121,5 @@ export default async function (ctx) {
   }
   await authorize.save()
 
-  ctx.vmState({})
+  ctx.vmState(authorize.toJSON())
 }

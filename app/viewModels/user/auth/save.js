@@ -1,37 +1,33 @@
+/* @flow */
 import Auth from 'models/auth'
 import Message from 'models/message'
 import Verification from 'models/verification'
 
 import oauthConfig from 'config/oauth'
-export default async function (ctx) {
-  var auth = ctx.state.auth
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  var params = {
+import type { Context } from 'koa'
+import type User from 'models/user'
+import type Token from 'models/token'
+export default async function (ctx: Context) {
+  let auth: Auth = ctx.state.auth
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let tokenUser: User = token.get('user')
+  let params = {
     ...ctx.request.query,
     ...ctx.request.body,
   }
   if (!auth) {
     auth = new Auth({
       user: user || tokenUser,
+      column: String(params.column || ''),
+      value: String(params.value || ''),
     })
   }
   ctx.state.rateLimit = false
-  await auth.setToken(token).canThrow('save')
-
-
-  for (let key in params) {
-    let value = params[key]
-    if (!key || /^[a-z][0-9a-zA-Z]*$/.test(key) || value === null || value === void 0 || typeof value === 'object') {
-      delete params[key]
-      continue
-    }
-    params[key] = String(value)
-  }
+  await auth.setToken(token).can('save')
 
   if (params.settings) {
-    if (typeof params.settings != 'object') {
+    if (typeof params.settings !== 'object') {
       try {
         params.settings = JSON.parse(params.settings)
       } catch (e) {
@@ -39,69 +35,63 @@ export default async function (ctx) {
         throw e
       }
     }
-    if (params.settings && typeof params.settings == 'object' && !Array.isArray(params.settings)) {
+    if (params.settings && typeof params.settings === 'object' && !Array.isArray(params.settings)) {
       auth.set('settings', params.settings)
     }
   }
 
   if (auth.isNew) {
-    const isAdmin = !tokenUser.equals(auth.get('user'))
-
     ctx.state.rateLimit = true
-    var column = String(params.column)
-    auth.set('column', column)
-
-    if (column == 'email' || column == 'phone') {
-      auth.set('value', params.value)
-
-      var validate
-      if (validate = auth.validateSync()) {
-        throw validate;
+    let column: string = auth.get('column')
+    if (column === 'email' || column === 'phone') {
+      let validate
+      if ((validate = auth.validateSync())) {
+        throw validate
       }
 
       if (!params.code) {
-        ctx.throw('验证码不能为空', 403);
+        ctx.throw(403, 'required', { path: 'code' })
       }
 
-      var verification = await Verification.findByCode({
+      let verification = await Verification.findByCode({
         token,
         type: 'auth_save',
         code: params.code,
         user: auth.get('user'),
         to: auth.get('value'),
-        toType: auth.get('column') == 'phone' ? 'sms' : auth.get('column'),
+        toType: column === 'phone' ? 'sms' : column,
       })
-      if (!verification && ctx.app.env != 'development') {
-        ctx.throw('验证码不正确', 403);
+      if (!verification && ctx.app.env !== 'development') {
+        ctx.throw(403, 'incorrect', { path: 'code' })
       }
     } else if (oauthConfig[column]) {
       let state = token.get('state.auth.' + column) || {}
       let userInfo = state.userInfo
       if (!userInfo || !userInfo.id || (Date.now() - 300 * 10000) > state.createdAt.getTime()) {
-        ctx.throw('未登录认证帐号', 403, {oauth: true})
+        ctx.throw(401, 'notlogged', { column })
       }
-      token.set('state.auth.' + column, void 0)
+      token.set('state.auth.' + column, undefined)
 
       auth.set('value', userInfo.id)
       auth.set('token', state.accessToken)
       auth.set('state', state.userInfo)
-      auth.savePost(token)
+      auth.oncePost(token)
     } else {
-      ctx.throw('绑定的字段不正确', 403)
+      ctx.throw(403, 'match', { path: 'column' })
     }
 
 
-    var message = new Message({
+    let message = new Message({
       user: auth.get('user'),
+      contact: auth.get('user'),
       creator: tokenUser,
       application: token.get('application'),
       type: 'auth_save',
-      readOnly: true,
       auth: auth.get('_id'),
       display: auth.get('display'),
       token,
     })
-    auth.savePost(message)
+    auth.oncePost(message)
   }
   await auth.save()
 }

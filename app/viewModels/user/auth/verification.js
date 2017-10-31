@@ -1,39 +1,34 @@
+/* @flow */
 import User from 'models/user'
 import Verification from 'models/verification'
-export default async function (ctx) {
-  var auth = ctx.state.auth
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  var params = {
+
+import type { Context } from 'koa'
+import type Auth from 'models/auth'
+import type Token from 'models/token'
+export default async function (ctx: Context) {
+  let auth: Auth = ctx.state.auth
+  let user: ?User = ctx.state.user
+  let token: Token = ctx.state.token
+  let params = {
     ...ctx.request.query,
     ...ctx.request.body,
   }
 
-  var used
-  var type
-  var to
-  var toType
+
+
+  let type: string
+  let to: string
+  let toType: string
   if (auth) {
     // 删除权限
-    await auth.setToken(token).canThrow('delete')
+    await auth.setToken(token).can('delete')
     type = 'auth_delete'
     to = auth.get('value')
     toType = auth.get('column')
-    if (toType == 'phone') {
-      used = '解除手机绑定'
-    } else {
-      used = '解除邮箱绑定'
-    }
   } else {
     type = 'auth_save'
-    to = (body.to || '').toString().trim()
-    toType = (body.to_type || '').toString().trim()
-    if (toType == 'phone') {
-      used = '绑定手机'
-    } else {
-      used = '绑定邮箱'
-    }
+    to = String(params.to || '').trim()
+    toType = String(params.to_type || '').trim()
   }
 
 
@@ -45,18 +40,22 @@ export default async function (ctx) {
     }
   }
 
-  var verification = new Verification({
+  if (!user) {
+    ctx.throw(403, 'required', { path: 'user' })
+    return
+  }
+
+  let verification = new Verification({
     token,
     user,
     type,
-    toType: toType == 'phone' ? 'sms' : toType,
+    toType: toType === 'phone' ? 'sms' : toType,
     to,
     nickname: user.get('nickname') || user.get('username'),
-    used,
     ip: ctx.ip,
   })
 
-  await verification.save();
+  await verification.save()
 
   ctx.vmState(verification)
 }

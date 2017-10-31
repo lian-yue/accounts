@@ -1,8 +1,7 @@
-import Router from 'viewModels/router'
-
-import body from 'viewModels/middlewares/body'
-
-import id from './middlewares/id'
+/* @flow */
+import Router from 'models/router'
+import bodyMiddleware from 'viewModels/middlewares/body'
+import messageMiddleware from './middlewares/message'
 
 
 import list from './list'
@@ -16,18 +15,17 @@ import clear from './clear'
 const router = new Router
 
 router.get('/', list)
-router.get('/:id', id, read)
+router.get('/:message', messageMiddleware, read)
 
-router.use(body)
+router.use(bodyMiddleware)
 
 router.put(['/', '/save'], save)
 router.post(['/', '/save'], save)
 
 
-router.del('/:id', id, del)
-router.post('/:id/delete', id, del)
+router.del('/:message', messageMiddleware, del)
+router.post('/:message/delete', messageMiddleware, del)
 
 router.post('/clear', clear)
-
 
 export default router

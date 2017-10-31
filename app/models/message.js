@@ -1,11 +1,17 @@
 /* @flow */
-import {Schema} from 'mongoose'
+import { Schema, Error as MongooseError } from 'mongoose'
+
+import { hideIP } from './utils'
+
+
+import locale from './locale/default'
+import createError from './createError'
 
 import model from './model'
-import Meta from './meta'
-import Token from './token'
 
-const schema = new Schema({
+import Meta from './meta'
+
+const schema: Schema<MessageModel> = new Schema({
   user: {
     type: Schema.Types.ObjectId,
     index: true,
@@ -16,6 +22,7 @@ const schema = new Schema({
   contact: {
     type: Schema.Types.ObjectId,
     ref: 'User',
+    required: true,
   },
 
   creator: {
@@ -28,11 +35,6 @@ const schema = new Schema({
     ref: 'Application',
   },
 
-  readOnly: {
-    type: Boolean,
-    default: false,
-  },
-
   type: {
     type: String,
     default: '',
@@ -43,7 +45,21 @@ const schema = new Schema({
   message: {
     type: String,
     default: '',
-    maxlength: [1024 * 16, '消息不能大于 16KB'],
+    validate: [
+      {
+        validator(value) {
+          if (value.length <= (1024 * 16)) {
+            return true
+          }
+          this.invalidate('message', new MongooseError.ValidatorError({
+            path: 'message',
+            maxlength: '16KB',
+            type: 'maxlength',
+            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+          }))
+        },
+      },
+    ]
   },
 
   userAgent: {
@@ -84,14 +100,8 @@ const schema = new Schema({
 
 
 
-schema.virtual('isAdmin').get(function () {
-  if (this.get('readOnly')) {
-    return true
-  }
-  if (['', 'application'].indexOf(this.get('type')) === -1) {
-    return true
-  }
-  return false
+schema.virtual('readOnly').get(function () {
+  return ['', 'application'].indexOf(this.get('type')) === -1
 })
 
 
@@ -101,24 +111,16 @@ schema.virtual('isAdmin').get(function () {
  */
 schema.set('toJSON', {
   virtuals: true,
-  transform(doc, ret) {
-    let creator = doc.get('creator')
-    let tokenUser = doc.getToken() ? doc.getToken().get('user') : undefined
-    if (tokenUser && !tokenUser.get('black') && tokenUser.get('admin')) {
+  transform(doc: MessageModel, ret) {
+    let token = doc.getToken()
+    let user = token ? token.get('user') : undefined
+    let me = user && user.equals(doc.get('creator'))
+    let admin = user && user.get('admin') && !user.get('black')
+    if (admin) {
       // 不处理
-    } else if (tokenUser && creator && tokenUser.equals(creator)) {
+    } else if (me) {
       delete ret.token
-      if (ret.ip) {
-        let separator = ret.ip.indexOf(':') === -1 ? '.' : ':'
-        let ip = ret.ip.split(separator)
-        if (ip.length <= 4) {
-          ip[ip.length - 1] = '*'
-        } else {
-          ip[ip.length - 1] = '*'
-          ip[ip.length - 2] = '*'
-        }
-        ret.ip = ip.join(separator)
-      }
+      ret.ip = hideIP(ret.ip)
     } else {
       delete ret.ip
       delete ret.token
@@ -129,157 +131,131 @@ schema.set('toJSON', {
 
 
 
-schema.methods.canNotDelete = async function canNotDelete(token?: Token) {
+schema.methods.canNotDelete = async function canNotDelete(token?: TokenModel) {
   if (this.get('deletedAt')) {
-    this.throw(404, 'Message does not exist')
+    throw createError(404, 'notexist', { path: 'message' })
   }
 }
 
-/**
- * 权限方法
- * @param  {[type]} method [description]
- * @return {[type]}        [description]
- */
-schema.methods.canList = async function canList(token?: Token) {
+
+schema.methods.canList = async function canList(token?: TokenModel, { deletedAt = false }: { deletedAt: boolean } = {}) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
+  await token.canUser(token, { value: true })
 
-  let tokenUser = token.get('user')
-  if (!tokenUser.get('application') || !tokenUser.get('application').equals(this.get('application'))) {
-    await token.canScope(token, {path: 'message/list'})
-  }
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user')) || this.get('deletedAt') || deletedAt
+  let application: ?ApplicationModel = token.get('application')
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'message/list', admin })
   }
 
-  if (!tokenUser.equals(this.get('user')) || this.get('deletedAt')) {
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canUser(token, { value: true, admin })
 }
 
-schema.methods.canClear = async function canClear(token?: Token) {
+
+schema.methods.canClear = async function canClear(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
+  await token.canUser(token, { value: true })
 
-  let tokenUser = token.get('user')
-  if (!tokenUser.get('application') || !tokenUser.get('application').equals(this.get('application'))) {
-    await token.canScope(token, {path: 'message/clear'})
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user')) || this.get('deletedAt')
+  let application: ?ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'message/clear', admin })
   }
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-
-  await tokenUser.canNotBlock(token)
-
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canUser(token, { value: true, black: true, admin })
 }
 
-schema.methods.canRead = async function canRead(token?: Token) {
+
+schema.methods.canRead = async function canRead(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ?ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'message/read', admin })
   }
 
-  await token.canUser(token, {value: true})
-
-  let tokenUser = token.get('user')
-  if (!tokenUser.get('application') || !tokenUser.get('application').equals(this.get('application'))) {
-    await token.canScope(token, {path: 'message/read'})
+  if (this.get('deletedAt') && (user.get('black') || !user.get('admin'))) {
+    await this.canNotDelete(token)
   }
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  admin = admin || this.get('deletedAt')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'message/read', admin })
   }
 
-  if (this.get('deletedAt') && !tokenUser.get('admin')) {
-    await this.canNotDelete()
-  }
-
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canNotBlock(token)
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canUser(token, { value: true, admin })
 }
 
 
-schema.methods.canSave = async function canSave(token?: Token) {
+schema.methods.canSave = async function canSave(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+
+
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ?ApplicationModel = token.get('application')
+
+  await token.canScope(token, { path: 'message/save', admin })
+
+  if (Boolean(this.get('application')) !== Boolean(application)) {
+    throw createError(400, 'incorrect', { path: 'application' })
   }
 
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'message/save'})
-  let tokenUser = token.get('user')
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
+  if (application && !application.equals(this.get('application'))) {
+    throw createError(400, 'incorrect', { path: 'application' })
   }
 
-  if (Boolean(this.get('application')) !== Boolean(tokenUser.get('application'))) {
-    this.throw(400, 'The `application` parameter is incorrect')
-  }
+  await this.canNotDelete(token)
 
-  if (this.get('application') && !this.get('application').equals(tokenUser.get('application'))) {
-    this.throw(400, 'The `application` parameter is incorrect')
-  }
-  await tokenUser.canNotBlock(token)
-
-  await this.canNotDelete()
-
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
-  }
+  await token.canUser(token, { value: true, black: true, admin })
 }
 
-schema.methods.canDelete = async function canDelete(token?: Token) {
+schema.methods.canDelete = async function canDelete(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  let tokenUser = token.get('user')
-  if (!tokenUser.get('application') || !tokenUser.get('application').equals(this.get('application'))) {
-    await token.canScope(token, {path: 'message/delete'})
-  }
-  if (!tokenUser.equals(this.get('user'))) {
-    await token.canScope(token, {path: 'admin'})
-  }
-  await tokenUser.canNotBlock(token)
-  await this.canNotDelete()
+  await token.canUser(token, { value: true })
 
-  if (!tokenUser.equals(this.get('user'))) {
-    await tokenUser.canHasAdmin(token)
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user'))
+  let application: ?ApplicationModel = token.get('application')
+
+  if (!application || !application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'message/delete', admin })
   }
+
+  await this.canNotDelete(token)
+
+  await token.canUser(token, { value: true, black: true, admin })
 }
-
 
 
 
 /**
- * 创建者
- * @return {[type]} [description]
- */
-schema.pre('save', function (next) {
-  if (!this.get('creator')) {
-    this.set('creator', this.get('user'))
-  }
-  next()
-})
-
-/**
- * 联系人对方
+ * 联系人方
  * @type {[type]}
  */
-schema.pre('save', function (next) {
+schema.pre('validate', function () {
   if (!this.get('contact')) {
-    this.set('contact', this.get('creator'))
+    this.set('contact', this.get('creator') || this.get('user'))
   }
-  next()
 })
 
 /**
@@ -313,7 +289,7 @@ schema.pre('save', function (next) {
     return next()
   }
 
-  let message = new this.constructor({
+  let message: MessageModel = new this.constructor({
     ...this.toObject(),
     user: creator,
     contact: user,
@@ -322,6 +298,8 @@ schema.pre('save', function (next) {
   this.savePost(message)
   next()
 })
+
+
 
 /**
  * 通知数
@@ -337,14 +315,14 @@ schema.pre('save', function (next) {
     value = -1
   }
   if (value) {
-    this.savePost(async () => {
+    this.oncePost(async function () {
       let query: Object = {
         _id: this.get('user')
       }
       if (value === -1) {
-        query.message = {$gte: 0}
+        query.message = { $gte: 0 }
       }
-      await Meta.findOneAndUpdate(query, {$inc: {message: value}})
+      await Meta.findOneAndUpdate(query, { $inc: { message: value } })
     })
   }
   next()
@@ -352,9 +330,9 @@ schema.pre('save', function (next) {
 
 
 
-export default model('Message', schema, {
+export default (model('Message', schema, {
   strict: false,
   shardKey: {
     user: 1,
   },
-})
+}): Class<MessageModel>)

@@ -1,6 +1,9 @@
 /* @flow */
 import querystring from 'querystring'
-import {qq as config} from 'config/oauth'
+
+import createError from '../../createError'
+
+import { qq as config } from 'config/oauth'
 
 import Api from './api'
 
@@ -87,7 +90,7 @@ export default class QQ extends Api {
     if (!params.openid && !body.openid) {
       let accessToken = this.getAccessToken()
       if (!accessToken || !accessToken.openid) {
-        throw new Error('The "openid" is empty')
+        throw createError(500, 'notexist', { path: 'openid' })
       }
       if (method === 'GET' || method === 'HEAD') {
         params.openid = accessToken.openid
@@ -124,14 +127,15 @@ export default class QQ extends Api {
     }
 
     if (message) {
-      let e = new Error(message)
-      if (!isNaN(body.error)) {
-        e.code = body.error
-      }
+      let status = 500
+      let props = {}
       if (response.statusCode >= 400) {
-        e.statusCode = response.statusCode
+        status = response.statusCode
       }
-      throw e
+      if (body.error) {
+        props.code = body.error
+      }
+      throw createError(status, message, props)
     }
     return body
   }

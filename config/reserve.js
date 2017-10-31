@@ -63,6 +63,10 @@ let reserve = [
   'base',
   'class',
   'app',
+  'api',
+  'new',
+  'save',
+  'word',
 ]
 
 

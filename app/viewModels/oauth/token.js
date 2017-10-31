@@ -1,9 +1,14 @@
+/* @flow */
 import User from 'models/user'
 import Token from 'models/token'
 import Message from 'models/message'
+import Authorize from 'models/authorize'
 import Application from 'models/application'
-import rateLimit from 'viewModels/middlewares/rateLimit'
+
 import tokenMiddleware from 'viewModels/middlewares/token'
+import rateLimitMiddleware from 'viewModels/middlewares/rateLimit'
+
+import type { Context } from 'koa'
 
 const refreshTokenMiddleware = tokenMiddleware({
   types: ['refresh'],
@@ -22,7 +27,7 @@ const codeTokenMiddleware = tokenMiddleware({
   application: {},
 })
 
-const passwordRateLimit = rateLimit({
+const passwordRateLimit = rateLimitMiddleware({
   name: 'token-password-ip',
   limit: 10,
   key(ctx) {
@@ -31,47 +36,59 @@ const passwordRateLimit = rateLimit({
 }, {
   name: 'token-password-username',
   limit: 15,
-  key(ctx) {
-    var username = ctx.body.username || ctx.query.username
-    return username.trim().toLocaleLowerCase() || false
+  key(ctx: Context) {
+    let request = ctx.request
+    let username
+    if (request.body && request.body.username) {
+      username = request.body.username
+    } else if (request.query.username) {
+      username = request.query.username
+    }
+    return String(username).trim().toLocaleLowerCase() || false
   }
 })
 
 
 
-export default async function (ctx) {
-  var token
-  var application = ctx.state.application
-  var params = {...ctx.request.body, ...ctx.request.query}
-
-
-  if (params.token_type && String(params.token_type).toLocaleLowerCase() != 'bearer') {
-    ctx.throw('"token_type" can only be "bearer" ', 403, {code: 'invalid_grant'})
+export default async function (ctx: Context) {
+  let token: ?Token
+  let application: Application = ctx.state.application
+  let params = {
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
+    ...ctx.request.query
   }
 
-  var scopes = params.scope || params.scopes
-  if (typeof scopes != 'undefined' && !Array.isArray(scopes)) {
-    scopes = String(scopes).split(' ').map(scope => scope.trim()).filter(scope => scope)
 
+  if (params.token_type && String(params.token_type).toLocaleLowerCase() !== 'bearer') {
+    ctx.throw(403, 'incorrect', { path: 'token_type', value: params.token_type, code: 'invalid_grant' })
+  }
+
+  let scopes = params.scope || params.scopes
+  if (typeof scopes !== 'undefined') {
+    if (!Array.isArray(scopes)) {
+      scopes = String(scopes).split(' ').map(scope => scope.trim()).filter(scope => scope)
+    }
     for (let i = 0; i < scopes.length; i++) {
       let scope = scopes[i]
-      if (!application.canScope(scope)) {
-        ctx.throw(`"scope.${scope}" no permission`, 400, {code: 'invalid_scope'})
+      if (!await application.canBoolean('scope', { path: scope })) {
+        ctx.throw(400, 'match', { path: 'scope', value: scope, code: 'invalid_scope' })
       }
     }
   }
-
   switch (params.grant_type || '') {
-    case 'refresh_token':
+    case 'refresh_token': {
       // 刷新 token
-      token = await refreshTokenMiddleware(ctx)
+      if (!(token = await refreshTokenMiddleware(ctx))) {
+        ctx.throw(500)
+        return
+      }
 
       // 权限
       if (scopes) {
         for (let i = 0; i < scopes.length; i++) {
           let scope = scopes[i]
-          if (!token.canScope(scope)) {
-            ctx.throw(`"scope.${scope}" no permission`, 400, {code: 'invalid_scope'})
+          if (!await token.canBoolean('scope', { path: scope, application: false })) {
+            ctx.throw(400, 'match', { path: 'scope', value: scope, code: 'invalid_scope' })
           }
         }
       } else {
@@ -79,7 +96,7 @@ export default async function (ctx) {
       }
 
       // 创建 accessToken
-      var accessToken = new Token({
+      let accessToken = new Token({
         type: 'access',
         scopes,
         parent: token,
@@ -87,34 +104,43 @@ export default async function (ctx) {
         authorize: token.get('authorize'),
         application: token.get('application'),
       })
-
-      if (!accessToken.updateLog(ctx, true)) {
-        accessToken.set('logs', token.get('logs'))
-      }
+      accessToken.updateLog(ctx, true)
       await accessToken.save()
+
+      // 登录信息
+      let message = new Message({
+        user: token.get('user'),
+        type: 'user_login',
+        refresh: true,
+        oauth: true,
+        token,
+      })
+      await message.save()
 
       // 响应 state
       ctx.vmState({
         ...accessToken.toJSON(),
         access_token: accessToken.get('id') + accessToken.get('secret'),
-        refresh_token: token.get('id') + token.get('secret'),
       })
-      break;
-    case 'authorization_code':
+      break
+    }
+    case 'authorization_code': {
       // 验证码登录
-      token = await codeTokenMiddleware(ctx)
+      if (!(token = await codeTokenMiddleware(ctx))) {
+        ctx.throw(500)
+        return
+      }
 
       // redirect_uri 参数判断
-      if (typeof params.redirect_uri != 'undefined' && token.get('state.redirectUri') !== params.redirect_uri) {
-        ctx.throw('"redirect_uri" parameter is incorrect', 403, {code:'invalid_grant'})
+      if (typeof params.redirect_uri !== 'undefined' && token.get('state.redirectUri') !== params.redirect_uri) {
+        ctx.throw(403, 'incorrect', { path: 'redirect_uri', value: params.redirect_uri, code: 'invalid_grant' })
       }
 
       // 删除
       token.set('deletedAt', new Date)
-
       await token.save()
 
-      var refreshToken = new Token({
+      let refreshToken = new Token({
         type: 'refresh',
         scopes: token.get('scopes'),
         parent: token,
@@ -125,7 +151,7 @@ export default async function (ctx) {
       })
       await refreshToken.save()
 
-      var accessToken = new Token({
+      let accessToken = new Token({
         type: 'access',
         scopes: token.get('scopes'),
         parent: refreshToken,
@@ -141,27 +167,28 @@ export default async function (ctx) {
         access_token: accessToken.get('id') + accessToken.get('secret'),
         refresh_token: refreshToken.get('id') + refreshToken.get('secret'),
       })
-      break;
-    case 'password':
+      break
+    }
+    case 'password': {
       // 密码登录
       if (!application.get('auths').get('password')) {
-        ctx.throw('The authorization mode is not allowed', 400, {code: 'unsupported_response_type'})
+        ctx.throw(400, 'incorrect', { path: 'grant_type', code: 'unsupported_response_type' })
       }
       scopes = scopes || []
-      var username = params.username || ''
-      var password = params.password || ''
+      let username = String(params.username || '')
+      let password = String(params.password || '')
       if (!username) {
-        ctx.throw('Username can not be empty', 403, {code: 'invalid_grant'})
+        ctx.throw(403, 'required', { path: 'username', code: 'invalid_grant' })
       }
 
       if (!password) {
-        ctx.throw('Password can not be empty', 403, {code: 'invalid_grant'})
+        ctx.throw(403, 'required', { path: 'password', code: 'invalid_grant' })
       }
 
       // 取用户
-      var user
+      let user: ?User
       try {
-        await passwordRateLimit(ctx, async function() {
+        await passwordRateLimit(ctx, async function () {
           user = await User.findByAuth(username)
         })
       } catch (e) {
@@ -170,33 +197,38 @@ export default async function (ctx) {
       }
 
       if (!user) {
-        ctx.throw('Username does not exist', 404, {code: 'invalid_grant'})
+        ctx.throw(404, 'notexist', { path: 'user', code: 'invalid_grant' })
+        return
       }
 
       if (!await user.comparePassword(password)) {
-        var message = new Message({
+        let message = new Message({
           user,
           application,
           type: 'user_login',
-          readOnly: true,
           error: true,
           oauth: true,
           userAgent: Application.forwardUserAgent(ctx, ''),
           ip: Application.forwardIp(ctx, '0.0.0.0'),
         })
         await message.save()
-        ctx.throw('Incorrect password', 403, {code: 'invalid_grant'})
+        ctx.throw(403, 'incorrect', { path: 'password', code: 'invalid_grant' })
       }
 
-      // 黑名单
-      if (await user.can('login')) {
-        ctx.throw(`Your account is blocked because of "${user.get('reason')}"`, 403, {code: 'invalid_grant', black: true})
-      }
+      let accessToken: Token = new Token({
+        type: 'access',
+        scopes,
+        application,
+      })
+      accessToken.updateLog(ctx, true)
+
+      //  权限
+      await user.setToken(accessToken).can('login')
 
       // 取认证
-      var authorize = await Authorize.findOneCreate(user, application)
+      let authorize = await Authorize.findOneCreate(user, application)
 
-      var refreshToken = new Token({
+      let refreshToken = new Token({
         type: 'refresh',
         scopes,
         user,
@@ -206,21 +238,15 @@ export default async function (ctx) {
       refreshToken.updateLog(ctx, true)
       await refreshToken.save()
 
-      var accessToken = new Token({
-        type: 'access',
-        scopes,
-        parent: refreshToken,
-        user,
-        authorize,
-        application,
-      })
-      accessToken.updateLog(ctx, true)
+
+      accessToken.set('parent', refreshToken)
+      accessToken.set('user', user)
+      accessToken.set('authorize', authorize)
       await accessToken.save()
 
-      var message = new Message({
+      let message = new Message({
         user,
         type: 'user_login',
-        readOnly: true,
         oauth: true,
         token: accessToken,
       })
@@ -231,32 +257,35 @@ export default async function (ctx) {
         access_token: accessToken.get('id') + accessToken.get('secret'),
         refresh_token: refreshToken.get('id') + refreshToken.get('secret'),
       })
-      break;
-    case 'client_credentials':
+      break
+    }
+    case 'client_credentials': {
       // 客户端 登陆
       scopes = scopes || ['**']
 
-      var user = await User.findById(application.get('creator')).exec()
+      let user: ?User = await User.findById(application.get('creator')).exec()
+      if (!user) {
+        ctx.throw(500)
+        return
+      }
 
       // 取认证
-      var authorize = await Authorize.findOneCreate(user, application)
+      let authorize = await Authorize.findOneCreate(user, application)
 
-
-      var accessToken = new Token({
+      let accessToken = new Token({
         type: 'access',
         scopes,
         user,
-        renewal: true,
+        client: true,
         authorize,
         application,
-        expiredAt,
       })
       await accessToken.save()
 
-      var message = new Message({
+
+      let message = new Message({
         user,
         type: 'user_login',
-        readOnly: true,
         oauth: true,
         userAgent: Application.forwardUserAgent(ctx, ''),
         token: accessToken,
@@ -268,8 +297,9 @@ export default async function (ctx) {
         ...accessToken.toJSON(),
         access_token: accessToken.get('id') + accessToken.get('secret'),
       })
-      break;
+      break
+    }
     default:
-      ctx.throw('"grant_type" not supported', 400, {code: 'unsupported_grant_type'})
+      ctx.throw(400, 'incorrect', { path: 'grant_type', code: 'unsupported_grant_type' })
   }
 }

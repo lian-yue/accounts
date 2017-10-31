@@ -286,7 +286,7 @@ function base(opts = {}) {
 
 }
 
-const ie = merge(base({name: 'ie'}), {
+const ie = merge(base({ name: 'ie' }), {
   module: {
     rules: [
       {
@@ -309,7 +309,7 @@ const ie = merge(base({name: 'ie'}), {
 })
 
 
-const vue = merge(base({name: 'vue'}), {
+const vue = merge(base({ name: 'vue' }), {
   resolve: {
     extensions: [
       isDev ? '.dev.vue' : '.prod.vue',

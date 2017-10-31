@@ -1,9 +1,10 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
+import bodyMiddleware from 'viewModels/middlewares/body'
 import tokenMiddleware from 'viewModels/middlewares/token'
 
-import id from './middlewares/id'
+import authorizeMiddleware from './middlewares/authorize'
 
 
 import list from './list'
@@ -25,16 +26,16 @@ const router = new Router
 
 
 router.get('/', list)
-router.get('/:id', id, read)
+router.get('/:authorize', authorizeMiddleware, read)
 
-router.use(body)
+router.use(bodyMiddleware)
 
-router.post('/:id', accessToken, id, save)
-router.del('/:id', id, del)
-router.post('/:id/delete', id, del)
+router.post('/:authorize', accessToken, authorizeMiddleware, save)
+router.del('/:authorize', authorizeMiddleware, del)
+router.post('/:authorize/delete', authorizeMiddleware, del)
 
-router.post('/:id/clear', id, clear)
-router.post('/clear', id, clear)
+router.post('/:authorize/clear', authorizeMiddleware, clear)
+router.post('/clear', authorizeMiddleware, clear)
 
 
 

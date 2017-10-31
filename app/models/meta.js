@@ -1,6 +1,6 @@
 /* @flow */
 import model from './model'
-import {Schema} from 'mongoose'
+import { Schema } from 'mongoose'
 
 const schema = new Schema({
   message: {
@@ -12,7 +12,7 @@ const schema = new Schema({
 
 schema.set('toJSON', {
   virtuals: true,
-  transform(doc, ret) {
+  transform(doc: MetaModel, ret) {
     delete ret._id
   }
 })

@@ -1,58 +1,57 @@
 /* @flow */
-import {Schema, Types} from 'mongoose'
+import { Schema, Types, Error as MongooseError } from 'mongoose'
 import bcrypt            from 'bcrypt'
 
 import reserve          from 'config/reserve'
-import locale           from 'config/locale'
+
+import locale from './locale/default'
+
+import createError from './createError'
+
+import  { matchEmail, matchMobilePhone } from './utils'
 
 import model            from './model'
-import * as validator   from './validator'
-
 
 import Auth     from './auth'
 import Meta     from './meta'
-import Token     from './token'
-// import Message  from './message'
+import Message  from './message'
 
 
-const schema = new Schema({
+
+const schema: Schema<UserModel> = new Schema({
   username: {
     type: String,
     unique: true,
     trim: true,
-    required: [true, '请输入用户名'],
-    minlength: [3, '用户名长度不能少于 3 位或大于 16 字节 ({PATH})'],
-    maxlength: [16, '用户名长度不能少于 3 位或大于 16 字节 ({PATH})'],
-    match: [/^[0-9a-z-]+$/i, '用户名只允许使用英文，数字和 - 符号 ({PATH})'],
+    required: true,
+    minlength: 3,
+    maxlength: 16,
+    match: /^([0-9a-z]+\-)*[0-9a-z]+$/i,
     validate: [
       {
+        type: 'notphone',
+        message: locale.getLanguagePackValue(['errors', 'notphone']),
         validator(username) {
-          return !validator.mobilePhone(username)
+          return !matchMobilePhone(username)
         },
-        message: '用户名不能为电话号 ({PATH})',
       },
       {
-        validator(username) {
-          return !/^[-]|[-]$/.test(username)
-        },
-        message: '用户名不能已 - 开头或结尾 ({PATH})',
-      },
-      {
+        type: 'notid',
+        message: locale.getLanguagePackValue(['errors', 'notid']),
         validator(username) {
           try {
-            /* eslint-disable */
+            // eslint-disable-next-line
             new Types.ObjectId(username)
-            /* eslint-enable */
           } catch (e) {
             return true
           }
           return true
         },
-        message: '用户名不能是 ID ({PATH})',
       },
       {
+        type: 'reserve',
+        message: locale.getLanguagePackValue(['errors', 'reserve']),
         validator: reserve,
-        message: '用户名被系统保留 ({PATH})',
       },
       {
         isAsync: true,
@@ -60,19 +59,30 @@ const schema = new Schema({
           if (this.get('admin')) {
             return true
           }
-          let auth: Auth | null = await Auth.findOne({
+          let auth: ?Auth = await Auth.findOne({
             user: this,
             column: 'username',
             deletedAt: {
               $exists: false,
             }
           }).read('primary').exec()
-          return !auth || (auth.get('createdAt').getTime() + 86400 * 1000 * 30) < Date.now()
+          if (!auth || (auth.get('createdAt').getTime() + 86400 * 1000 * 30) < Date.now()) {
+            return true
+          }
+
+          this.invalidate('username', new MongooseError.ValidatorError({
+            path: 'username',
+            rate: '1 month',
+            type: 'ratelimit',
+            method: 'modify',
+            message: locale.getLanguagePackValue(['errors', 'ratelimit']),
+          }))
         },
-        message: '用户名只能一个月内只能改变一次 ({PATH})',
       },
       {
         isAsync: true,
+        type: 'hasexist',
+        message: locale.getLanguagePackValue(['errors', 'hasexist']),
         async validator(value) {
           let auth = await Auth.findOne({
             column: 'username',
@@ -80,7 +90,6 @@ const schema = new Schema({
           }).read('primary').exec()
           return !auth || this.equals(auth.get('user'))
         },
-        message: '用户名已存在 ({PATH})',
       }
     ],
   },
@@ -88,84 +97,155 @@ const schema = new Schema({
   password: {
     type: String,
     set(password) {
-      if (this.$_setPassword === undefined) {
-        this.$_setPassword = this.get('password')
+      if (this._password === undefined) {
+        this._password = this.get('password')
       }
       return password
     },
+    required: [
+      function () {
+        if (this.get('password') || typeof this.get('password') === 'string') {
+          return true
+        }
+        return false
+      },
+      locale.getLanguagePackValue(['errors', 'required']),
+    ],
+
     validate: [
       {
-        validator(password) {
-          if (this.$_oldPassword !== undefined) {
-            return password || !this.$_setPassword
-          }
-          return true
-        },
-        message: '旧密码不能为空 ({PATH})',
-      },
-      {
-        validator(password) {
-          return this.$_newPassword === undefined || this.$_newPassword
-        },
-        message: '新密码不能为空 ({PATH})',
-      },
-      {
-        validator(password) {
-          if (this.$_newPassword === undefined) {
+        validator(value) {
+          if (value === undefined) {
             return true
           }
-          return typeof this.$_newPassword === 'string' && this.$_newPassword.length >= 6 && this.$_newPassword.length <= 64
+          if (typeof value === 'string' && value.length >= 6) {
+            return true
+          }
+          this.invalidate('password', new MongooseError.ValidatorError({
+            path: 'password',
+            minlength: 6,
+            type: 'minlength',
+            message: locale.getLanguagePackValue(['errors', 'minlength']),
+          }))
         },
-        message: '新密码长度不能少于 6 或大于 64 字节 ({PATH})',
+      },
+      {
+        validator(value) {
+          if (value === undefined) {
+            return true
+          }
+          if (typeof value === 'string' && value.length <= 64) {
+            return true
+          }
+
+          this.invalidate('password', new MongooseError.ValidatorError({
+            path: 'password',
+            maxlength: 64,
+            type: 'maxlength',
+            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+          }))
+        },
+      },
+
+
+      {
+        validator(password) {
+          if (!this.$isValid('oldPassword')) {
+            return true
+          }
+          if (this._oldPassword === undefined || this._oldPassword || !this._password) {
+            return true
+          }
+          this.invalidate('oldPassword', locale.getLanguagePackValue(['errors', 'required']), undefined, 'required')
+        },
       },
       {
         validator(password) {
-          if (this.$_newPasswordAgain !== undefined) {
-            return this.$_newPassword === this.$_newPasswordAgain
+          if (!this.$isValid('newPassword')) {
+            return true
           }
-          return true
+          if (this._newPassword === undefined || this._newPassword) {
+            return true
+          }
+          this.invalidate('newPassword', locale.getLanguagePackValue(['errors', 'required']), undefined, 'required')
         },
-        message: '两次输入的新密码不相同 ({PATH})',
+      },
+
+      {
+        validator(password) {
+          if (!this.$isValid('newPassword')) {
+            return true
+          }
+          let value = this._newPassword
+          if (value === undefined) {
+            return true
+          }
+          if (typeof value === 'string' && value.length >= 6) {
+            return true
+          }
+          this.invalidate('newPassword', new MongooseError.ValidatorError({
+            path: 'newPassword',
+            minlength: 6,
+            type: 'minlength',
+            message: locale.getLanguagePackValue(['errors', 'minlength']),
+          }))
+        },
       },
       {
         validator(password) {
-          if (password || typeof password === 'string') {
-            return !!password
+          if (!this.$isValid('newPassword')) {
+            return true
           }
-          return true
+          let value = this._newPassword
+          if (value === undefined) {
+            return true
+          }
+
+          if (typeof value === 'string' && value.length <= 64) {
+            return true
+          }
+
+          this.invalidate('newPassword', new MongooseError.ValidatorError({
+            path: 'newPassword',
+            maxlength: 64,
+            type: 'maxlength',
+            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+          }))
         },
-        message: '密码不能为空 ({PATH})',
       },
       {
         validator(password) {
-          if (password) {
-            return password.length >= 6 && password.length <= 64
+          let value = this._newPasswordAgain
+          if (value === undefined || this._newPassword === value) {
+            return true
           }
-          return true
+          this.invalidate('newPasswordAgain', locale.getLanguagePackValue(['errors', 'notsame']), undefined, 'notsame')
         },
-        message: '密码长度不能少于 6 或大于 64 字节 ({PATH})',
       },
       {
         validator(password) {
-          if (this.$_passwordAgain !== undefined) {
-            return !password || password === this.$_passwordAgain
+          let value = this._passwordAgain
+          if (value === undefined || password === value) {
+            return true
           }
-          return true
+          this.invalidate('passwordAgain', locale.getLanguagePackValue(['errors', 'notsame']), undefined, 'notsame')
         },
-        message: '两次输入的密码不相同 ({PATH})',
       },
       {
         isAsync: true,
         async validator(password) {
-          if (!this.$_oldPassword) {
+          if (!this.$isValid('oldPassword')) {
             return true
           }
-          if (await this.comparePassword(this.$_oldPassword)) {
+          let value = this._oldPassword
+          if (value === undefined || this._password) {
             return true
           }
-          return false
+          if (await this.comparePassword(value)) {
+            return true
+          }
+          this.invalidate('oldPassword', locale.getLanguagePackValue(['errors', 'incorrect']), undefined, 'incorrect')
         },
-        message: '旧密码不正确 ({PATH})',
       },
     ],
   },
@@ -190,10 +270,11 @@ const schema = new Schema({
 
     validate: [
       {
+        type: 'match',
         validator(value) {
-          return !!locale[value]
+          return !!locale.constructor.getLanguageList()[value]
         },
-        message: '区域不存在 ({PATH})',
+        message: locale.getLanguagePackValue(['errors', 'match']),
       },
     ]
   },
@@ -210,7 +291,7 @@ const schema = new Schema({
 
   application: {
     type: Schema.Types.ObjectId,
-    // ref: 'Application',
+    ref: 'Application',
   },
 
   createdAt: {
@@ -233,18 +314,13 @@ const schema = new Schema({
   reason: {
     type: String,
     trim: true,
-    maxlength: [255, '理由不能大于 255 字节 ({PATH})'],
-    validate: [
-      {
-        validator(reason) {
-          if (this.isModified('black')) {
-            return reason
-          }
-          return true
-        },
-        message: '理由不能为空 ({PATH})',
+    maxlength: 255,
+    required: [
+      function () {
+        return this.isModified('black')
       },
-    ]
+      locale.getLanguagePackValue(['errors', 'required']),
+    ],
   },
 
   // 管理员
@@ -265,8 +341,8 @@ const schema = new Schema({
     {
       type: String,
       index: true,
-      required: [true, '认证名不能为空'],
-      maxlength: [32, '认证名长度不能大于 32 字节 ({PATH})'],
+      required: true,
+      maxlength: 32,
     }
   ],
 
@@ -277,17 +353,17 @@ const schema = new Schema({
 
   nickname: {
     type: String,
-    required: [true, '名称不能为空'],
     trim: true,
-    maxlength: [32, '名称长度不能大于 32 字节 ({PATH})'],
+    required: true,
+    maxlength: 16,
   },
 
   avatar: {
     type: String,
     default: '',
     set(value) {
-      if (this.$_avatar === undefined) {
-        this.$_avatar = this.get('avatar')
+      if (this._avatar === undefined) {
+        this._avatar = this.get('avatar')
       }
       return value
     }
@@ -296,7 +372,7 @@ const schema = new Schema({
   description: {
     type: String,
     default: '',
-    maxlength: [255, '描述长度不能大于 255 字节 ({PATH})'],
+    maxlength: 255,
   },
 
   gender: {
@@ -309,8 +385,8 @@ const schema = new Schema({
 
   birthday: {
     type: Date,
-    min: [new Date('1900-01-01'), '生日不能小于 1900 年或大于 2016 年 ({PATH})'],
-    max: [new Date('2016-01-01'), '生日不能小于 1900 年或大于 2016 年 ({PATH})'],
+    min: new Date('1900-01-01'),
+    max: new Date('2016-01-01'),
   },
 })
 
@@ -320,32 +396,48 @@ schema.virtual('url').get(function () {
 })
 
 schema.virtual('oldPassword').set(function (value) {
-  this.$_oldPassword = value
+  this._oldPassword = value
 })
 
 schema.virtual('passwordAgain').set(function (value) {
-  this.$_passwordAgain = value
+  this._passwordAgain = value
 })
 
 schema.virtual('newPassword').set(function (value) {
-  this.$_newPassword = value
+  this._newPassword = value
 })
 
 schema.virtual('newPasswordAgain').set(function (value) {
-  this.$_newPasswordAgain = value
+  this._newPasswordAgain = value
+})
+
+schema.virtual('preAvatar').set(function (value) {
+  this._preAvatar = value
 })
 
 
 schema.set('toJSON', {
-  transform(doc, ret) {
-    let tokenUser = doc.getToken() ? doc.getToken().get('user') : undefined
-    if (!tokenUser || tokenUser.get('black') || !tokenUser.get('admin')) {
+  transform(doc: UserModel, ret) {
+    let token = doc.getToken()
+    let user = token ? token.get('user') : undefined
+    let admin = user && !user.get('black') && user.get('admin')
+    let me = user && user.equals(doc)
+
+    if (!admin) {
       delete ret.registerIp
     }
-    if (tokenUser && tokenUser.equals(this)) {
+
+    if (me || admin) {
       ret.password = ret.password ? true : false
     } else {
       delete ret.password
+    }
+
+    // 已屏蔽的用户 对外 不返回 名称 头像 描述
+    if (ret.black && !admin && !me) {
+      ret.nickname = '***'
+      ret.avatar = ''
+      ret.description = '****'
     }
 
     ret.url = doc.get('url')
@@ -361,7 +453,7 @@ schema.set('toJSON', {
  */
 schema.methods.comparePassword = function comparePassword(password) {
   return new Promise((resolve, reject) => {
-    let hash = this.$_setPassword === undefined ? this.get('password') : this.$_setPassword
+    let hash = this._password === undefined ? this.get('password') : this._password
     if (!password || typeof password !== 'string' || !hash) {
       return resolve(false)
     }
@@ -374,123 +466,108 @@ schema.methods.comparePassword = function comparePassword(password) {
   })
 }
 
-schema.methods.canHasAdmin = async function canHasAdmin(token?: Token) {
-  if (!this.get('admin')) {
-    this.throw(403, 'You do not have permission')
+schema.methods.canHasAdmin = async function canHasAdmin(token?: TokenModel) {
+  if (this.get('admin')) {
+    return
   }
+  throw createError(403, 'permission')
 }
 
-schema.methods.canNotBlack = async function canNotBlack(token?: Token) {
+
+schema.methods.canNotBlack = async function canNotBlack(token?: TokenModel) {
   if (!this.get('black')) {
-    this.throw(403, `Your account is blocked because of "${this.get('reason')}"`, {black: true})
+    return
   }
+  throw createError(403, 'black', { path: 'user', reason: this.get('reason') })
 }
 
 
 
-schema.methods.canLogin = async function canLogin(token?: Token) {
+schema.methods.canLogin = async function canLogin(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: false})
+  await token.canUser(token, { value: false })
+  if (token.get('application')) {
+    await this.canNotBlack(token)
+  }
 }
 
 
-schema.methods.canOauth = async function canOauth(token?: Token) {
+schema.methods.canOauth = async function canOauth(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canApplication(token, {value: false})
-  await token.canUser(token, {value: this})
-  await this.canNotBlack(token)
+  await token.canApplication(token, { value: false })
+  await token.canUser(token, { value: this, black: true })
 }
 
-schema.methods.canList = async function canList(token?: Token) {
+schema.methods.canList = async function canList(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'user/list'})
-  await token.canScope(token, {path: 'admin'})
-
-  let tokenUser = token.get('user')
-  await tokenUser.canNotBlack(token)
-  await tokenUser.canHasAdmin(token)
+  await token.canScope(token, { path: 'user/list', admin: true })
+  await token.canUser(token, { value: true, admin: true })
 }
 
-schema.methods.canRead = async function canRead(token?: Token) {
+schema.methods.canRead = async function canRead(token?: TokenModel) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  let tokenUser = token.get('user')
-  if (!this.equals(tokenUser)) {
-    await token.canScope(token, {path: 'user/read'})
-    await token.canScope(token, {path: 'admin'})
-    await tokenUser.canNotBlack(token)
+
+  if (!this.equals(token.get('user'))) {
+    await token.canScope(token, { path: 'user/read' })
+    await token.canUser(token, { value: true, black: true })
   }
 }
 
-schema.methods.canSave = async function canSave(token?: Token, {username, passowrd}: {username?: boolean, passowrd?: boolean}) {
+schema.methods.canSave = async function canSave(token?: TokenModel, { username, password }: { username?: boolean, password?: boolean }) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'user/save'})
-  if (!this.isNew && (username || this.isModified('username'))) {
-    await token.canScope(token, {path: 'user/username'})
-  }
-  if (!this.isNew && (passowrd || this.isModified('passowrd'))) {
-    await token.canScope(token, {path: 'user/passowrd'})
-  }
-
-  let tokenUser = token.get('user')
-  if (!this.equals(tokenUser)) {
-    await token.canScope(token, {path: 'admin'})
-  }
-
-  await tokenUser.canNotBlack(token)
-  if (!this.equals(tokenUser)) {
-    await tokenUser.canHasAdmin(token)
-  }
+  let admin = !this.equals(token.get('user'))
+  await token.canScope(token, { path: 'user/save', admin })
+  await token.canUser(token, { value: true, admin })
 }
 
 
-schema.methods.canBlack = async function canBlack(token?: Token) {
+schema.methods.canAdmin = async function canAdmin(token?: TokenModel, { value }: { value?: boolean } = {}) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'user/black'})
-  await token.canScope(token, {path: 'admin'})
-  let tokenUser = token.get('user')
-  await tokenUser.canNotBlack(token)
-  await tokenUser.canHasAdmin(token)
-  if (this.get('block')) {
-    this.throw(403, 'The user is blacklisted')
+  await token.canScope(token, { path: 'user/admin', admin: true })
+  await token.canUser(token, { value: true, admin: true })
+
+  if (this.equals(token.get('user'))) {
+    throw createError(403, 'notself')
+  }
+
+  if (typeof value !== 'undefined' && !this.isModified('admin') && this.get('admin') === value) {
+    throw createError(403, 'hassame', { path: 'admin' })
   }
 }
 
-schema.methods.canRestore = async function canRestore(token?: Token) {
+
+schema.methods.canBlack = async function canBlack(token?: TokenModel, { value }: { value?: boolean } = {}) {
   if (!token) {
-    return this.throwTokenNotExists()
+    throw createError(400, 'required', { path: 'token' })
   }
-  await token.canUser(token, {value: true})
-  await token.canScope(token, {path: 'user/restore'})
-  await token.canScope(token, {path: 'admin'})
-  let tokenUser = token.get('user')
-  await tokenUser.canNotBlack(token)
-  await tokenUser.canHasAdmin(token)
-  if (!this.get('block')) {
-    this.throw(403, 'The user is not blacklisted')
+
+  await token.canScope(token, { path: 'user/black', admin: true })
+  await token.canUser(token, { value: true, admin: true })
+
+  if (this.equals(token.get('user'))) {
+    throw createError(403, 'notself')
+  }
+
+  if (typeof value !== 'undefined' && !this.isModified('black') && this.get('black') === value) {
+    throw createError(403, 'hassame', { path: 'black' })
   }
 }
-
-
 
 schema.statics.Auth = Auth
 schema.statics.Meta = Meta
-// schema.statics.Message = Message
+schema.statics.Message = Message
 
 /**
  * 简单的  Populate
@@ -545,14 +622,14 @@ schema.statics.metaPopulate = function metaPopulate(all: boolean = false): Objec
  * @param  string account
  * @return boolean | User
  */
-schema.statics.findByAuth = async function findByAuth(val, columns: string[] | string = ['id', 'email', 'phone', 'username']): Object | null {
+schema.statics.findByAuth = async function findByAuth(val, columns: string[] | string = ['id', 'email', 'phone', 'username']): Promise<UserModel | void> {
   let value = String(val).toLowerCase().trim()
 
   if (!value) {
-    return null
+    return
   }
   if (!columns || columns.length === 0) {
-    return null
+    return
   }
 
 
@@ -562,10 +639,10 @@ schema.statics.findByAuth = async function findByAuth(val, columns: string[] | s
     column = columns
   } else if (/^[0-9a-z]{24}$/.test(value) && columns.indexOf('id') !== -1) {
     column = 'id'
-  } else if ((value2 = validator.email(value)) && columns.indexOf('email') !== -1) {
+  } else if ((value2 = matchEmail(value)) && columns.indexOf('email') !== -1) {
     column = 'email'
     value = value2
-  } else if ((value2 = validator.mobilePhone(value)) && columns.indexOf('phone') !== -1) {
+  } else if ((value2 = matchMobilePhone(value)) && columns.indexOf('phone') !== -1) {
     column = 'phone'
     value = value2
   } else if (columns.indexOf('username') !== -1) {
@@ -574,7 +651,7 @@ schema.statics.findByAuth = async function findByAuth(val, columns: string[] | s
     column = ''
   }
   if (!column) {
-    return null
+    return
   }
 
   if (column === 'id') {
@@ -588,11 +665,11 @@ schema.statics.findByAuth = async function findByAuth(val, columns: string[] | s
   }
 
   if (column !== 'username') {
-    query.deletedAt = {$exists: false}
+    query.deletedAt = { $exists: false }
   }
 
   let auth = await Auth.findOne(query).populate('user').exec()
-  return auth ? auth.get('user') : null
+  return auth ? auth.get('user') : undefined
 }
 
 /**
@@ -660,7 +737,7 @@ schema.preAsync('save', async function () {
     return
   }
   let value: string = this.get('username').toLowerCase()
-  let auth: Auth | null = await Auth.findOne({
+  let auth: ?Auth = await Auth.findOne({
     column: 'username',
     value,
     deletedAt: {
@@ -733,14 +810,14 @@ schema.pre('save', function (next) {
     }
 
     if (token) {
-      query._id = {$ne: token.get('_id')}
+      query._id = { $ne: token.get('_id') }
     }
 
     await require('./token').default.updateMany(query, {
       $set: {
         deletedAt: date,
       }
-    }, {w: 0}).exec()
+    }, { w: 0 }).exec()
 
     // token 等于自己删除
     if (token && this.equals(token.get('user'))) {
@@ -756,11 +833,12 @@ schema.pre('save', function (next) {
  * @return {[type]} [description]
  */
 schema.post('save', function () {
-  delete this.$_setPassword
-  delete this.$_oldPassword
-  delete this.$_passwordAgain
-  delete this.$_newPassword
-  delete this.$_newPasswordAgain
+  delete this._password
+  delete this._oldPassword
+  delete this._passwordAgain
+  delete this._newPassword
+  delete this._newPasswordAgain
+  delete this._preAvatar
 })
 
 
@@ -771,7 +849,7 @@ schema.post('save', function () {
  * @param  {[type]} User [description]
  * @return {[type]}      [description]
  */
-schema.on('init', async function (User) {
+schema.on('init', async function (User: Class<UserModel>) {
   let user = await User.findOne().exec()
 
   if (user) {
@@ -786,9 +864,8 @@ schema.on('init', async function (User) {
   })
 
   await user.save()
-
   console.log('Create Admin User username: admin, password: 123456')
 })
 
 
-export default model('User', schema)
+export default (model('User', schema): Class<UserModel>)

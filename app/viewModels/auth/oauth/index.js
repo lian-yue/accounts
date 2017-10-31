@@ -1,18 +1,20 @@
-import Router from 'viewModels/router'
-import body from 'viewModels/middlewares/body'
+/* @flow */
+import Router from 'models/router'
+import bodyMiddleware from 'viewModels/middlewares/body'
 
 import tokenMiddleware from 'viewModels/middlewares/token'
-import rateLimit from 'viewModels/middlewares/rateLimit'
-import column from './middlewares/column'
+import columnMiddleware from './middlewares/column'
 
 
 
+import token from './token'
 import login from './login'
 import logout from './logout'
 
 import callback from './callback'
-import token from './token'
 
+
+import type { Context } from 'koa'
 
 const accessToken = tokenMiddleware({
   types: ['access'],
@@ -28,7 +30,7 @@ const accessToken = tokenMiddleware({
 
 const router = new Router
 
-router.use(body, accessToken, column)
+router.use(bodyMiddleware, accessToken, columnMiddleware)
 
 
 router.get('/token', token)
@@ -39,5 +41,5 @@ router.post('/callback', callback)
 
 
 
-router.opt(['/token', '/login', '/logout'], ctx => {})
+router.opt(['/token', '/login', '/logout'], function (ctx: Context): void {})
 export default router

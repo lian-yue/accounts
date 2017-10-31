@@ -1,6 +1,9 @@
-export default async function (ctx) {
-  var token = ctx.state.token
-  var state = token.toJSON()
+/* @flow */
+import type { Context } from 'koa'
+import type Token from 'models/token'
+
+export default async function (ctx: Context) {
+  let token: Token = ctx.state.token
   ctx.vmState({
     ...token.toJSON(),
     active: true,

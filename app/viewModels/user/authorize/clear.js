@@ -1,32 +1,32 @@
-import { Types } from 'mongoose'
+/* @flow */
 import Authorize from 'models/authorize'
 import Token from 'models/token'
 
-const ObjectId = Types.ObjectId
+import type { Context } from 'koa'
+import type User from 'models/user'
 
-export default async function (ctx, next) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  var authorize = ctx.state.authorize
+export default async function (ctx: Context) {
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let authorize: ?Authorize = ctx.state.authorize
   if (authorize) {
-    await authorize.setToken(token).canThrow('clear')
+    await authorize.setToken(token).can('clear')
   } else {
     await (new Authorize({
       _id: '594e210d5cc916fe9dabccdb',
       user,
-    })).setToken(token).canThrow('clear')
+    })).setToken(token).can('clear')
   }
 
-  var query = {}
-  var date = new Date
+  let query = {}
+  let date = new Date
   query.user = user
   if (authorize) {
     query.authorize = authorize
   }
-  query._id = {$ne: token.get('_id')}
-  query.createdAt = {$lt: date}
-  query.deletedAt = {$exists: false}
+  query._id = { $ne: token.get('_id') }
+  query.createdAt = { $lt: date }
+  query.deletedAt = { $exists: false }
 
 
   // 删除当前 token
@@ -35,7 +35,7 @@ export default async function (ctx, next) {
     await token.save()
   }
 
-  await Token.updateMany(query, {$set:{deletedAt: date}}, {w: 0}).exec()
+  await Token.updateMany(query, { $set: { deletedAt: date } }, { w: 0 }).exec()
 
   ctx.vmState({})
 }

@@ -1,7 +1,9 @@
 /* @flow */
-import {weibo as config} from 'config/oauth'
-import Api from './api'
+import { weibo as config } from 'config/oauth'
 
+import createError from '../../createError'
+
+import Api from './api'
 
 config.clientId = config.clientId || config.client_id || config.appkey || config.app_key
 config.clientSecret = config.clientSecret || config.client_secret || config.appSecret || config.app_secret
@@ -41,9 +43,9 @@ export default class Weibo extends Api {
     }
     let accessToken = this.getAccessToken()
     if (!accessToken || !accessToken.uid) {
-      throw new Error('The "uid" is empty')
+      throw createError(500, 'notexist', { path: 'uid' })
     }
-    let userInfo = await this.api('GET', '/users/show.json', {uid: accessToken.uid})
+    let userInfo = await this.api('GET', '/users/show.json', { uid: accessToken.uid })
 
     let email
     try {

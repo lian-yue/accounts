@@ -1,27 +1,28 @@
-import Verification from 'models/verification';
+/* @flow */
+import Verification from 'models/verification'
 
-export default async function(ctx) {
-  var params = {
+import type { Context } from 'koa'
+import type Token from 'models/token'
+export default async function (ctx: Context) {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  var to = String(params.to || '').trim()
-  var toType = String(params.to_type || '').trim()
+  let to = String(params.to || '').trim()
+  let toType = String(params.to_type || '').trim()
 
-  var token = ctx.state.token
+  let token: Token = ctx.state.token
 
-  var verification = new Verification({
+  let verification: Verification = new Verification({
     ip: ctx.ip,
     token,
     type: 'user_save',
-    toType: toType == 'phone' ? 'sms' : toType,
+    toType: toType === 'phone' ? 'sms' : toType,
     to,
-    nickname: '尊敬的用户',
-    used: '注册帐号',
   })
 
   await verification.save()
 
-  ctx.vmState(verification);
+  ctx.vmState(verification)
 }

@@ -1,67 +1,74 @@
+/* @flow */
 import User from 'models/user'
 import Auth from 'models/auth'
 import Message from 'models/message'
-import Verification from 'models/verification';
+import Authorize from 'models/authorize'
+import Verification from 'models/verification'
 
-export default async function(ctx) {
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Application from 'models/application'
+export default async function (ctx: Context) {
 
-  var params = {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  var id = String(params.id || '')
-  var code = String(params.code || '').trim()
+  let id = String(params.id || '')
+  let code = String(params.code || '').trim()
 
-  var token = ctx.state.token
-  var application = token.get('application')
+  let token: Token = ctx.state.token
+  let application: ?Application = token.get('application')
 
   if (!id) {
-    ctx.throw('ID 不能为空', 403)
+    ctx.throw(403, 'required', { path: 'id' })
   }
-  var auth = await Auth.findById(id).populate({
+
+  let auth: ?Auth = await Auth.findById(id).populate({
     path: 'user',
     populate: [User.metaPopulate(true)]
   }).exec()
 
-  if (!auth || auth.get('deletedAt') || ['email', 'phone'].indexOf(auth.get('column')) == -1) {
-    ctx.throw('验证码不正确', 403)
+  if (!auth || auth.get('deletedAt') || ['email', 'phone'].indexOf(auth.get('column')) === -1) {
+    ctx.throw(403, 'notexist', { path: 'auth' })
+    return
   }
 
-  var user = auth.get('user')
+  let user: User = auth.get('user')
 
-  var verification  = await Verification.findByCode({
+  let verification: ?Verification = await Verification.findByCode({
     user,
     token,
     type: 'user_password',
     code,
     to: auth.get('value'),
-    test: params.test,
+    test: Boolean(params.test),
   })
 
-  if (!verification && ctx.app.env != 'development') {
-    ctx.throw('验证码不正确', 403)
+  if (!verification && ctx.app.env !== 'development') {
+    ctx.throw(403, 'incorrect', { path: 'code' })
   }
 
   // 测试
   if (params.test) {
-    ctx.vmState({});
-    return;
+    ctx.vmState({})
+    return
   }
 
-  var newPassword = String(params.new_password || '')
-  var newPasswordAgain = String(params.new_password_again || '')
+  let newPassword = String(params.new_password || '')
+  let newPasswordAgain = String(params.new_password_again || '')
 
 
-  user.set('password', newPassword);
-  user.set('newPassword', newPassword);
-  user.set('newPasswordAgain', newPasswordAgain);
+  user.set('password', newPassword)
+  user.set('newPassword', newPassword)
+  user.set('newPasswordAgain', newPasswordAgain)
 
   await user.save()
 
 
 
-  var authorize
+  let authorize
   if (application) {
     authorize = await Authorize.findOneCreate(user, application)
   }
@@ -70,13 +77,9 @@ export default async function(ctx) {
   await token.save()
 
 
-  var message = new Message({
+  let message = new Message({
     user,
-    readOnly: true,
-    type: 'user_save',
-    data: {
-      password: '***',
-    },
+    type: 'user_password',
     token,
   })
   await message.save()

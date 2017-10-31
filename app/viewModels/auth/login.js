@@ -1,84 +1,89 @@
+/* @flow */
 import User from 'models/user'
 import Auth from 'models/auth'
 import Message from 'models/message'
 import Authorize from 'models/authorize'
 import oauthConfig from 'config/oauth'
 
-export default async function (ctx) {
-  var params = {
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Application from 'models/application'
+
+export default async function (ctx: Context) {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
-  var token = ctx.state.token
-  var application = token.get('application')
-  var user
+  let token: Token = ctx.state.token
+  let application: ?Application = token.get('application')
+  let user: ?User
 
 
-  var column = String(params.column || '').toLowerCase().trim()
+  let column = String(params.column || '').toLowerCase().trim()
   if (column) {
+    user = await User.findByAuth('www')
     if (!oauthConfig[column]) {
-      ctx.throw('认证字段不正确', 403)
+      ctx.throw(403, 'match', { path: 'column' })
     }
-    let state = token.get('state.auth.' + column) || {}
-    let userInfo = state.userInfo
+    let state: Object = token.get('state.auth.' + column) || {}
+    let userInfo: ?Object = state.userInfo
     if (!userInfo || !userInfo.id || (Date.now() - 300 * 10000) > state.createdAt.getTime()) {
-      ctx.throw('未登录认证帐号', 403, {column: true})
+      ctx.throw(401, 'notlogged', { column })
+      return
     }
-    user = await User.findByAuth(userInfo.id, column)
+
+    user = await User.findByAuth(userInfo.id, [column])
 
     if (!user) {
-      ctx.throw('Username does not exist', 404)
+      ctx.throw(404, 'notexist', { path: 'user' })
+      return
     }
 
-    let auth = await Auth.findOne({user, column, value: userInfo.id, deletedAt: {$exists: false}}).exec()
+    let auth = await Auth.findOne({ user, column, value: userInfo.id, deletedAt: { $exists: false } }).exec()
     if (auth) {
       auth.set('token', state.accessToken)
       auth.set('state', state.userInfo)
-      token.savePost(auth)
+      token.oncePost(auth)
     }
 
 
-    token.set('state.auth.' + column, void 0)
+    token.set('state.auth.' + column, undefined)
   } else {
-    var username = String(params.username || '').toLowerCase().trim()
-    var password = String(params.password || '');
+    let username = String(params.username || '').toLowerCase().trim()
+    let password = String(params.password || '')
 
 
     if (!username) {
-      ctx.throw('Username can not be empty', 403)
+      ctx.throw(403, 'required', { path: 'username' })
     }
 
     if (!password) {
-      ctx.throw('Password can not be empty', 403)
+      ctx.throw(403, 'required', { path: 'password' })
     }
-
     user = await User.findByAuth(username)
 
     if (!user) {
-      ctx.throw('Username does not exist', 404)
+      ctx.throw(404, 'notexist', { path: 'user' })
+      return
     }
     if (!await user.comparePassword(password)) {
-      var message = new Message({
+      let message = new Message({
         user,
-        readOnly: true,
         type: 'user_login',
         column,
         error: true,
         token,
       })
       await message.save()
-      ctx.throw('Incorrect password', 403)
+      ctx.throw(403, 'incorrect', { path: 'password' })
     }
   }
 
   await user.populate(User.metaPopulate(true)).execPopulate()
 
-  // 不允许登录
-  if (!await user.setToken(token).can('login')) {
-    ctx.throw(`Your account is blocked because of "${user.get('reason')}"`, 403, {black: true})
-  }
+  await user.setToken(token).can('login')
 
-  var authorize
+  let authorize: Authorize
   if (application) {
     authorize = await Authorize.findOneCreate(user, application)
   }
@@ -88,9 +93,8 @@ export default async function (ctx) {
 
   await token.save()
 
-  var message = new Message({
+  let message = new Message({
     user,
-    readOnly: true,
     type: 'user_login',
     column,
     token,

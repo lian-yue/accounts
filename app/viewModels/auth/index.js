@@ -1,38 +1,43 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
+import bodyMiddleware from 'viewModels/middlewares/body'
 import applicationMiddleware from 'viewModels/middlewares/application'
 import tokenMiddleware from 'viewModels/middlewares/token'
-import rateLimit from 'viewModels/middlewares/rateLimit'
+import rateLimitMiddleware from 'viewModels/middlewares/rateLimit'
 
 
 import oauth from './oauth'
 
 import token from './token'
-import exists from './exists'
 
+
+import exists from './exists'
 import login from './login'
 import loginVerification from './loginVerification'
-
 import logout from './logout'
 
 import create from './create'
 import createVerification from './createVerification'
 
+
 import password from './password'
 import passwordSelect from './passwordSelect'
 import passwordVerification from './passwordVerification'
 
-const router = new Router;
+import type { Context } from 'koa'
 
-const applicationId = applicationMiddleware({
+const router = new Router
+
+
+const applicationIdMiddleware = applicationMiddleware({
   secret: false,
   required: false,
   strict: false,
   auths: ['cors'],
 })
 
-const accessToken = tokenMiddleware({
+const accessTokenMiddleware = tokenMiddleware({
   types: ['access'],
   auths: ['cors'],
   user: false,
@@ -44,7 +49,7 @@ const accessToken = tokenMiddleware({
   },
 })
 
-const logoutToken = tokenMiddleware({
+const logoutTokenMiddleware = tokenMiddleware({
   types: ['access'],
   auths: ['cors'],
   black: false,
@@ -56,53 +61,55 @@ const logoutToken = tokenMiddleware({
   },
 })
 
-const rateLimitToken = rateLimit({
-  name:'auth_token',
+const rateLimitTokenMiddleware = rateLimitMiddleware({
+  name: 'auth_token',
   ip: true,
   limit: 20,
 })
 
-const rateLimitExists = rateLimit({
-  name:'auth_exists',
+const rateLimitExistsMiddleware = rateLimitMiddleware({
+  name: 'auth_exists',
   ip: true,
   limit: 60,
 })
 
-
-
-const rateLimitLogin = rateLimit({
-  name:'auth_login',
+const rateLimitLoginMiddleware = rateLimitMiddleware({
+  name: 'auth_login',
   ip: true,
   limit: 30,
   success: false,
 }, {
-  name:'auth_login',
+  name: 'auth_login',
   token: true,
   limit: 15,
 }, {
-  name:'auth_login',
+  name: 'auth_login',
   body: {
-    username:[value => String(value).toLocaleLowerCase().trim()]
+    username(value) {
+      return String(value).toLocaleLowerCase().trim()
+    }
   },
   limit: 30,
 })
 
 
 
-const rateLimitLoginVerification = rateLimit({
-  name:'auth_login_verification',
+const rateLimitLoginVerificationMiddleware = rateLimitMiddleware({
+  name: 'auth_login_verification',
   ip: true,
   limit: 12,
   success: true,
 }, {
-  name:'auth_login_verification',
+  name: 'auth_login_verification',
   token: true,
   limit: 6,
   success: true,
 }, {
-  name:'auth_login_verification',
+  name: 'auth_login_verification',
   body: {
-    to: [value => String(value).trim().toLocaleLowerCase()],
+    to(value) {
+      return String(value).trim().toLocaleLowerCase()
+    },
   },
   limit: 1,
   reset: 30,
@@ -110,22 +117,22 @@ const rateLimitLoginVerification = rateLimit({
 })
 
 
-const rateLimitCreate = rateLimit({
-  name:'auth_create',
+const rateLimitCreateMiddleware = rateLimitMiddleware({
+  name: 'auth_create',
   ip: true,
   limit: 120,
 }, {
-  name:'auth_create',
+  name: 'auth_create',
   token: true,
   limit: 60,
 }, {
-  name:'auth_create',
+  name: 'auth_create',
   ip: true,
   limit: 2,
   success: true,
   message: '当前 IP 注册过于频繁请{TIME}后重试'
 }, {
-  name:'auth_create',
+  name: 'auth_create',
   token: true,
   limit: 1,
   success: true,
@@ -135,23 +142,22 @@ const rateLimitCreate = rateLimit({
 
 
 
-
-
-
-const rateLimitCreateVerification = rateLimit({
-  name:'auth_create_verification',
+const rateLimitCreateVerificationMiddleware = rateLimitMiddleware({
+  name: 'auth_create_verification',
   ip: true,
   limit: 12,
   success: true,
 }, {
-  name:'auth_create_verification',
+  name: 'auth_create_verification',
   token: true,
   limit: 6,
   success: true,
 }, {
-  name:'auth_create_verification',
+  name: 'auth_create_verification',
   body: {
-    to: [value => String(value).trim().toLocaleLowerCase()],
+    to(value) {
+      return String(value).trim().toLocaleLowerCase()
+    }
   },
   limit: 1,
   reset: 30,
@@ -160,17 +166,16 @@ const rateLimitCreateVerification = rateLimit({
 
 
 
-
-
-
-const rateLimitPassword = rateLimit({
-  name:'auth_password',
+const rateLimitPasswordMiddleware = rateLimitMiddleware({
+  name: 'auth_password',
   ip: true,
   limit: 15,
 }, {
-  key:'auth_password',
+  name: 'auth_password',
   body: {
-    id: [id => String(id).trim().toLocaleLowerCase()]
+    id(value) {
+      return String(value).trim().toLocaleLowerCase()
+    }
   },
   limit: 30,
 })
@@ -178,8 +183,8 @@ const rateLimitPassword = rateLimit({
 
 
 
-const rateLimitPasswordSelect = rateLimit({
-  key:'auth_password_select',
+const rateLimitPasswordSelectMiddleware = rateLimitMiddleware({
+  name: 'auth_password_select',
   ip: true,
   limit: 15,
   success: true,
@@ -187,53 +192,56 @@ const rateLimitPasswordSelect = rateLimit({
 
 
 
-const rateLimitPasswordVerification = rateLimit({
-  key:'auth_password_verification',
+const rateLimitPasswordVerificationMiddleware = rateLimitMiddleware({
+  name: 'auth_password_verification',
   ip: true,
   limit: 12,
   success: true,
 }, {
-  key:'auth_password_verification',
+  name: 'auth_password_verification',
   token: true,
   limit: 6,
   success: true,
 }, {
-  key:'auth_password_verification',
+  name: 'auth_password_verification',
   body: {
-    to: [value => String(value).trim().toLocaleLowerCase()],
+    to(value) {
+      return String(value).trim().toLocaleLowerCase()
+    }
   },
   limit: 1,
   success: true,
 })
 
 
+
 router.use('/oauth/:column', oauth)
 
 
-router.get('/token', applicationId, rateLimitToken, token)
-router.opt('/token', applicationId)
+router.get('/token', applicationIdMiddleware, rateLimitTokenMiddleware, token)
+router.opt('/token', applicationIdMiddleware)
 
 
-router.post('/logout', body, logoutToken, logout)
-router.opt('/logout', logoutToken)
+
+router.post('/logout', bodyMiddleware, logoutTokenMiddleware, logout)
+router.opt('/logout', logoutTokenMiddleware)
+//
+router.use(bodyMiddleware, accessTokenMiddleware)
+//
+router.get('/exists', rateLimitExistsMiddleware, exists)
+
+router.post(['/', '/login'], rateLimitLoginMiddleware, login)
+router.post('/loginVerification', rateLimitLoginVerificationMiddleware, loginVerification)
 
 
-router.use(body, accessToken)
+router.put('/create', rateLimitCreateMiddleware, create)
+router.post('/create', rateLimitCreateMiddleware, create)
+router.post('/createVerification', rateLimitCreateVerificationMiddleware, createVerification)
+//
+//
+router.post('/password', rateLimitPasswordMiddleware, password)
+router.post('/passwordSelect', rateLimitPasswordSelectMiddleware, passwordSelect)
+router.post('/passwordVerification', rateLimitPasswordVerificationMiddleware, passwordVerification)
 
-router.get('/exists', rateLimitExists, exists)
-
-router.post(['/', '/login'], rateLimitLogin, login)
-router.post('/loginVerification', rateLimitLoginVerification, loginVerification)
-
-
-router.put('/create', rateLimitCreate, create)
-router.post('/create', rateLimitCreate, create)
-router.post('/createVerification', rateLimitCreateVerification, createVerification)
-
-router.post('/password', rateLimitPassword, password)
-router.post('/passwordSelect', rateLimitPasswordSelect, passwordSelect)
-router.post('/passwordVerification', rateLimitPasswordVerification, passwordVerification)
-
-router.opt(['/exists', '/login', '/loginVerification', '/create', '/createVerification', '/password', '/passwordSelect', '/passwordVerification'], ctx => {})
-
+router.opt(['/exists', '/login', '/loginVerification', '/create', '/createVerification', '/password', '/passwordSelect', '/passwordVerification'], function (ctx: Context): void { })
 export default router

@@ -1,7 +1,13 @@
-export default async function (ctx, next) {
-  var auth = ctx.state.auth
-  var token = ctx.state.token
-  await auth.setToken(token).canThrow('read')
+/* @flow */
+import type { Context } from 'koa'
+import type Auth from 'models/auth'
+import type Token from 'models/token'
+
+export default async function (ctx: Context) {
+  let auth: Auth = ctx.state.auth
+  let token: Token = ctx.state.token
+  await auth.setToken(token).can('read')
+
   ctx.vmState({
     ...auth.toJSON(),
     cans: {

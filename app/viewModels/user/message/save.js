@@ -1,11 +1,19 @@
-import User from 'models/user'
+/* @flow */
 import Message from 'models/message'
-export default async function (ctx) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
 
-  var params = {...ctx.query, ...ctx.request.body}
+import type { Context } from 'koa'
+import type User from 'models/user'
+import type Token from 'models/token'
+
+export default async function (ctx: Context) {
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let tokenUser: Token = token.get('user')
+  let params = {
+    ...ctx.request.query,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
+  }
+
   delete params.cans
   delete params.contact
   delete params.createdAt
@@ -17,22 +25,21 @@ export default async function (ctx) {
 
   for (let key in params) {
     let value = params[key]
-    if (!key || /^[a-z][0-9a-zA-Z]*$/.test(key) || value === null || value === void 0 || typeof value === 'object') {
+    if (!key || key.toLowerCase() === 'id' || /^[a-z][0-9a-zA-Z]*$/.test(key) || value === null || value === undefined || typeof value === 'object') {
       delete params[key]
       continue
     }
     params[key] = String(value)
   }
 
-  var message = new Message({
+  let message = new Message({
     ...params,
     user,
     creator: tokenUser,
-    readAt: params.readAt ? new Date : void 0,
+    readAt: params.readAt ? new Date : undefined,
     token,
   })
-
-  await message.canThrow('save')
+  await message.setToken(token).can('save')
   await message.save()
 
   ctx.vmState(message)

@@ -1,7 +1,13 @@
-export default async function (ctx, next) {
-  var token = ctx.state.token
-  var role = ctx.state.role
-  await role.setToken(token).canThrow('read')
+/* @flow */
+
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Role from 'models/role'
+
+export default async function (ctx: Context) {
+  let token: Token = ctx.state.token
+  let role: Role = ctx.state.role
+  await role.setToken(token).can('read')
 
 
   ctx.vmState({
@@ -9,7 +15,6 @@ export default async function (ctx, next) {
     cans: {
       save: await role.can('save'),
       delete: await role.can('delete'),
-      restore: await role.can('restore'),
     }
   })
 }

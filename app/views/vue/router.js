@@ -7,7 +7,7 @@ Vue.use(Router)
 const router = new Router({
   mode: 'history',
   fallback: false,
-  scrollBehavior()  {
+  scrollBehavior() {
     return { y: 0 }
   },
   routes: [
@@ -37,7 +37,8 @@ const router = new Router({
         },
       ],
     },
-    /*{
+    /*
+    {
       path: '/:username',
       component: () => import('./views/user/Index'),
       children: [
@@ -122,7 +123,8 @@ const router = new Router({
           ]
         },
       ]
-    },*/
+    },
+    */
     {
       path: '*',
       component: () => import('./views/errors/NotFound'),

@@ -1,6 +1,7 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
+import bodyMiddleware from 'viewModels/middlewares/body'
 import tokenMiddleware from 'viewModels/middlewares/token'
 import userMiddleware from './middlewares/user'
 
@@ -8,7 +9,6 @@ import list from './list'
 import read from './read'
 import save from './save'
 import black from './black'
-import restore from './restore'
 import admin from './admin'
 
 
@@ -18,7 +18,10 @@ import application from './application'
 import auth from './auth'
 
 
-const accessToken = tokenMiddleware({
+import type { Context } from 'koa'
+
+
+const accessTokenMiddleware = tokenMiddleware({
   types: ['access'],
   user: true,
   application: {
@@ -31,14 +34,15 @@ const router = new Router
 const userRouter = new Router
 
 
+
 router.use('/application', application)
-router.use(accessToken)
-router.opt(ctx => {})
+router.use(accessTokenMiddleware)
+router.opt(function (ctx: Context): void {})
 
 router.get('/', list)
 
-router.put(['/', '/save'], body, save)
-router.post(['/', '/save'], body, save)
+router.put(['/', '/save'], bodyMiddleware, save)
+router.post(['/', '/save'], bodyMiddleware, save)
 
 router.use('/userauth', auth)
 
@@ -57,14 +61,13 @@ userRouter.post('/', save)
 
 userRouter.put('/black', black)
 userRouter.post('/black', black)
-
-userRouter.del('/black', restore)
-userRouter.post('/restore', restore)
-
+userRouter.del('/black', black)
 
 userRouter.put('/admin', admin)
 userRouter.post('/admin', admin)
 userRouter.del('/admin', admin)
+
+
 
 
 export default router

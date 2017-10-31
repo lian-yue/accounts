@@ -1,5 +1,5 @@
 /* @flow */
-import {google as config} from 'config/oauth'
+import { google as config } from 'config/oauth'
 
 import Api from './api'
 

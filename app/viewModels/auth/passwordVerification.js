@@ -1,52 +1,55 @@
-import User from 'models/user';
+/* @flow */
 import Auth from 'models/auth'
-import Verification from 'models/verification';
-import site from 'config/site';
+import Verification from 'models/verification'
 
 
-export default async function(ctx) {
+import type User from 'models/user'
+import type Token from 'models/token'
+import type { Context } from 'koa'
+export default async function (ctx: Context) {
 
-  var params = {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  var id = String(body.id || '')
+  let id = String(params.id || '')
 
-  var token = ctx.state.token
+  let token: Token = ctx.state.token
 
   if (!id) {
-    ctx.throw('ID 不能为空', 403);
+    ctx.throw(404, 'required', { path: 'id' })
   }
 
-  var auth
+  let auth: ?Auth
   try {
-    auth = await Auth.findById(id).populate('user').exec();
+    auth = await Auth.findById(id).populate('user').exec()
   } catch (e) {
     e.status = 403
     throw e
   }
 
-  if (!auth || auth.get('deletedAt') || ['email', 'phone'].indexOf(auth.get('column')) == -1) {
-    ctx.throw('ID 不存在', 404);
+  if (!auth || auth.get('deletedAt') || ['email', 'phone'].indexOf(auth.get('column')) === -1) {
+    ctx.throw(404, 'notexist', { path: 'id' })
+    return
   }
 
-  var user = auth.get('user')
+  let user: ?User = auth.get('user')
 
   // 用户不存在
   if (!user) {
-    ctx.throw('用户不存在', 404)
+    ctx.throw(404, 'notexist', { path: 'user' })
+    return
   }
 
-  var verification = new Verification({
+  let verification = new Verification({
     ip: ctx.ip,
     user,
     token,
     type: 'user_password',
     to: auth.get('value'),
-    toType: auth.get('column') == 'phone' ? 'sms' : auth.get('column'),
+    toType: auth.get('column') === 'phone' ? 'sms' : auth.get('column'),
     nickname: user.get('nickname') || user.get('username'),
-    used: '修改密码',
   })
 
   await verification.save()

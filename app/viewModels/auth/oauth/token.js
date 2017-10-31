@@ -1,7 +1,16 @@
-import crypto from 'crypto'
-import cache from 'models/cache'
-export default async function(ctx, next) {
-  const oauth = ctx.state.token
-  const column = ctx.params.column
-  ctx.vmState(oauth.oauth.userInfo || {})
+/* @flow */
+import type { Context } from 'koa'
+import type Token from 'models/token'
+export default async function (ctx: Context) {
+  const column: string = ctx.params.column
+  const token: Token = ctx.state.token
+  let userInfo = token.get('state.auth.' + column + '.userInfo')
+  if (!userInfo || !userInfo.createdAt || userInfo.createdAt.getTime() < (Date.now() - 1800 * 1000)) {
+    if (userInfo) {
+      token.set('state.auth.' + column, undefined)
+      await token.save()
+    }
+    userInfo = {}
+  }
+  ctx.vmState(userInfo)
 }

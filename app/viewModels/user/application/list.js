@@ -1,28 +1,33 @@
+/* @flow */
 import { Types } from 'mongoose'
 import User from 'models/user'
 import Application from 'models/application'
 
+import type { Context } from 'koa'
+import type Token from 'models/token'
+
 const ObjectId = Types.ObjectId
 
-export default async function (ctx) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  await (new Application({
+export default async function (ctx: Context) {
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let tokenUser: User = token.get('user')
+  let canApplication: Application = new Application({
     _id: '594e210d5cc916fe9dabccdb',
     creator: user,
-  })).setToken(token).canThrow('list')
+  })
+  canApplication.setToken(token).can('list')
 
 
-  var params = {...ctx.query}
+  let params = { ...ctx.query }
 
-  var query = {}
-  var options = {
+  let query = {}
+  let options = {
     limit: 50,
   }
 
   if (params.limit && params.limit <= 100 && params.limit >= 1) {
-    options.limit = parseInt(params.limit)
+    options.limit = parseInt(params.limit, 10)
   }
 
   if (user) {
@@ -31,49 +36,52 @@ export default async function (ctx) {
 
   if (params.lt_id) {
     try {
-      query._id = {$lt:new ObjectId(params.lt_id)};
+      query._id = { $lt: new ObjectId(params.lt_id) }
     } catch (e) {
       e.status = 403
       throw e
     }
   }
 
-  query.deletedAt = {$exists: tokenUser.get('admin') && params.deleted ? true : false}
+  if (params.deleted && await canApplication.canBoolean('list', { deletedAt: true })) {
+    query.deletedAt = { $exists: true }
+  } else {
+    query.deletedAt = { $exists: false }
+  }
 
-  if (params.status && (params.status != 'block' || tokenUser.get('admin') || tokenUser.equals(user))) {
-    query.status = String(params.status)
+  if (params.status && typeof params.status === 'string' && await canApplication.canBoolean('list', { status: params.status })) {
+    query.status = params.status
   } else if (!tokenUser.get('admin') && !tokenUser.equals(user)) {
-    query.status = {$in: ['release', 'pending']}
+    query.status = { $in: ['release', 'pending'] }
   }
 
   if (params.search) {
-    let search = String(params.search).replace(/[\u0000-\u002f\u003a-\u0040\u005b-\u0060\u007b-\u007f]+/g, ' ').split(' ').filter(value => !!value);
+    let search = String(params.search).replace(/[\u0000-\u002f\u003a-\u0040\u005b-\u0060\u007b-\u007f]+/g, ' ').split(' ').filter(value => !!value)
     if (search.length) {
       query.$and = query.$and || []
       for (let value of search) {
-        query.$and.push({name:{$regex: value, $options:'i'}})
+        query.$and.push({ name: { $regex: value, $options: 'i' } })
       }
     }
   }
 
-  var results = await Application.find(query, null, {limit: options.limit + 1, sort:{_id:-1}}).populate(User.refPopulate('creator')).exec()
+  let applications: Application[] = await Application.find(query, undefined, { limit: options.limit + 1, sort: { _id: -1 } }).populate(User.refPopulate('creator')).exec()
 
-  var more = results.length > options.limit
+  let more = applications.length > options.limit
   if (more) {
-    results.pop()
+    applications.pop()
   }
-
-  for (let i = 0; i < results.length; i++) {
-    let value = results[i]
-    value.setToken(token)
-    let result = value.toJSON()
+  let results = []
+  for (let i = 0; i < applications.length; i++) {
+    let application = applications[i]
+    application.setToken(token)
+    let result: Object = application.toJSON()
     result.cans = {
-      save: await value.can('save'),
-      status: await value.can('status'),
-      delete: await value.can('delete'),
-      restore: await value.can('restore'),
+      save: await application.canBoolean('save'),
+      status: await application.canBoolean('status'),
+      delete: await application.canBoolean('delete'),
     }
-    results[i] = result
+    results.push(i)
   }
-  ctx.vmState({results, more})
+  ctx.vmState({ results, more })
 }

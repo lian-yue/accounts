@@ -1,4 +1,8 @@
 module.exports = {
-  en: true,
-  zh: true,
+  en: {
+    name: 'english',
+  },
+  'zh-cn': {
+    name: 'chinese',
+  }
 }

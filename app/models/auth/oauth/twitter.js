@@ -1,6 +1,9 @@
 /* @flow */
 import querystring from 'querystring'
-import {twitter as config} from 'config/oauth'
+import { twitter as config } from 'config/oauth'
+
+import createError from '../../createError'
+
 import Api from './api'
 
 config.consumer_key = config.consumer_key || config.consumerKey || config.clientId || config.client_id || config.appId || config.app_id || config.appKey || config.app_key
@@ -67,18 +70,13 @@ export default class Twitter extends Api {
       body = JSON.parse(body)
     } else if (body.substr(0, 1) === '<') {
       let matches = body.match(/<error>(.+?)<\/error>/i)
-      let e = new Error(matches ? matches[1] : 'Response body is html')
-      // $flow-disable-line
-      e.body = body
-      throw e
+      throw createError(500, matches ? matches[1] : 'Response body is html', { body })
     } else {
       body = querystring.parse(body)
     }
 
     if (body.errors) {
-      let e = new Error(body.errors[0].message)
-      e.code = body.errors[0].code
-      throw e
+      throw createError(500, body.errors[0].message, { code: body.errors[0].code })
     }
     return body
   }

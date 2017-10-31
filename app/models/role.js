@@ -1,21 +1,29 @@
-import {Schema} from 'mongoose'
+/* @flow */
+import { Schema, Error as MongooseError } from 'mongoose'
+
+import locale from './locale/default'
+
+import createError from './createError'
 
 import model from './model'
 
+import Application from './application'
+
+
 // 127 以下是普通用户
 // 255 无限制管理员
-const schema = new Schema({
+const schema: Schema<RoleModel> = new Schema({
   level: {
     type: Schema.Types.Integer,
     default: 0,
-    min: [0, '级别不能小于 0 年或大于 255 ({PATH})'],
-    max: [255, '别不能小于 0 年或大于 255 ({PATH})'],
+    min: 0,
+    max: 255,
   },
 
   name: {
     type: String,
-    required: [true, '角色名不能为空'],
-    maxlength: [32, '角色名长度不能大于 32 字节'],
+    required: true,
+    maxlength: 32,
   },
 
   application: {
@@ -28,7 +36,8 @@ const schema = new Schema({
   // 内容
   content: {
     type: String,
-    maxlength: [255, '内容描述不能大于 255 字节 {PATH}'],
+    default: '',
+    maxlength: 255,
   },
 
   children: [
@@ -39,17 +48,31 @@ const schema = new Schema({
       validate: [
         {
           validator(id) {
-            return this.get('children').length <= 8
+            let value = this.get('children').length
+            if (value <= 8) {
+              return true
+            }
+
+            this.invalidate('children', new MongooseError.ValidatorError({
+              path: 'children',
+              maximum: 8,
+              type: 'maximum',
+              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              value,
+            }))
           },
-          message: '继承用户组不能大于 8 个 ({PATH})',
         },
         {
           isAsync: true,
+          type: 'notexist',
+          message: locale.getLanguagePackValue(['errors', 'notexist']),
           async validator(id) {
-            let role = await this.constructor.findById(id).read('primary').exec()
+            if (!this.$isValid('children')) {
+              return true
+            }
+            let role: RoleModel = await this.constructor.findById(id).read('primary').exec()
             return role && this.get('application').equals(role.get('application')) && !this.equals(role)
           },
-          message: '继承用户组不存在 ({PATH})',
         },
       ],
     },
@@ -59,22 +82,32 @@ const schema = new Schema({
     {
       scope: {
         type: String,
-        maxlength: [64, '规则长度不能大于 64 字节'],
-        required: [true, '规则范围不能为空'],
+        maxlength: 64,
+        required: true,
         validate: [
           {
             validator(scope) {
-              return this.get('rules').length <= 32
+              let parent = this.parent()
+              let value = parent.get('rules').length
+              if (value <= 32) {
+                return true
+              }
+              parent.invalidate('rules', new MongooseError.ValidatorError({
+                path: 'rules',
+                maximum: 32,
+                type: 'maximum',
+                message: locale.getLanguagePackValue(['errors', 'maximum']),
+                value,
+              }))
             },
-            message: '规则数量不能大于 32 条 ({PATH})',
           },
         ]
       },
       state: {
         type: Schema.Types.Integer,
         default: 0,
-        max: 1,
         min: -1,
+        max: 1,
       },
     }
   ],
@@ -94,4 +127,119 @@ const schema = new Schema({
 })
 
 
-export default model('Role', schema)
+
+schema.methods.getApplication = async function getApplication() {
+  let application = this.get('application')
+  if (application && !application.get) {
+    application = await Application.findById(application).exec()
+  }
+  if (!application) {
+    throw createError(404, 'notexist', { path: 'application' })
+  }
+  return application
+}
+
+schema.methods.canList = async function canList(token?: TokenModel, { deletedAt = false }: { deletedAt: boolean } = {}) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+
+  let admin: boolean = true
+  let application: ApplicationModel = await this.getApplication()
+  if (application.get('deletedAt')) {
+    admin = true
+  } else if (application.get('creator').equals(token.get('user'))) {
+    admin = false
+  } else if (application.get('status') === 'rejected' || application.get('status') === 'banned') {
+    admin = true
+  } else if (this.get('deletedAt') || deletedAt) {
+    admin = true
+  }
+
+  if (!application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'role/list', admin })
+  }
+
+  if (this.get('deletedAt') || admin) {
+    await token.canUser(token, { value: true, admin })
+  }
+}
+
+
+
+schema.methods.canRead = async function canRead(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+
+  let admin: boolean = true
+  let application: ApplicationModel = await this.getApplication()
+  if (application.get('deletedAt')) {
+    admin = true
+  } else if (application.get('creator').equals(token.get('user'))) {
+    admin = false
+  } else if (application.get('status') === 'rejected' || application.get('status') === 'banned') {
+    admin = true
+  } else if (this.get('deletedAt')) {
+    admin = true
+  }
+
+  if (!application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'role/read', admin })
+  }
+
+  if (this.get('deletedAt') || admin) {
+    await token.canUser(token, { value: true, admin })
+  }
+}
+
+
+schema.methods.canSave = async function canSave(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+
+  let application: ApplicationModel = await this.getApplication()
+
+  await application.canNotDelete(token)
+
+  let admin: boolean = !application.get('creator').equals(user) || application.get('status') === 'banned'
+
+  if (!application.equals(this.get('application')) || admin) {
+    await token.canScope(token, { path: 'role/save', admin })
+  }
+
+  await token.canUser(token, { value: true, black: true, admin })
+}
+
+schema.methods.canDelete = async function canDelete(token?: TokenModel, { value }: { value?: boolean } = {}) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+
+  let user: UserModel = token.get('user')
+
+  let application: ApplicationModel = await this.getApplication()
+  await application.canNotDelete(token)
+
+  let admin = !application.get('creator').equals(user) || application.get('status') === 'banned'
+
+  await token.canScope(token, { path: 'role/delete', admin })
+  await token.canUser(token, { value: true, black: true, admin })
+  if (value === undefined) {
+    // undefined
+  } else if (value && this.get('deletedAt')) {
+    throw createError(404, 'notexist', { path: 'role' })
+  } else if (!value && !this.get('deletedAt')) {
+    throw createError(400, 'hasexist', { path: 'role' })
+  }
+}
+
+
+
+
+export default (model('Role', schema): Class<RoleModel>)

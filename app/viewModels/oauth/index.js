@@ -1,9 +1,11 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
+import bodyMiddleware from 'viewModels/middlewares/body'
+
 import applicationMiddleware from 'viewModels/middlewares/application'
 import tokenMiddleware from 'viewModels/middlewares/token'
-import rateLimit from 'viewModels/middlewares/rateLimit'
+import rateLimitMiddleware from 'viewModels/middlewares/rateLimit'
 
 
 import token from './token'
@@ -14,6 +16,7 @@ import authorize from './authorize'
 
 const applicationSecret = applicationMiddleware({
 })
+
 
 
 const introspectToken = tokenMiddleware({
@@ -28,7 +31,6 @@ const introspectToken = tokenMiddleware({
   },
 })
 
-
 const revokeToken = tokenMiddleware({
   name: 'token',
   types: ['refresh', 'access'],
@@ -37,8 +39,6 @@ const revokeToken = tokenMiddleware({
   application: {},
   log: true,
 })
-
-
 
 const authorizeToken = tokenMiddleware({
   types: ['access'],
@@ -54,25 +54,22 @@ const authorizeToken = tokenMiddleware({
 
 
 
-
-
-
-
-const rateLimitAuthorize = rateLimit({
-  name:'oauth_authorize',
+const rateLimitAuthorize = rateLimitMiddleware({
+  name: 'oauth_authorize',
   ip: true,
   limit: 60,
 }, {
-  name:'oauth_authorize',
+  name: 'oauth_authorize',
   limit: 60,
   key(ctx) {
     return ctx.state.token.get('id')
   }
 })
 
+
 const router = new Router
 
-router.use(body)
+router.use(bodyMiddleware)
 
 router.get('/introspect', introspectToken, introspect)
 router.post('/introspect', introspectToken, introspect)

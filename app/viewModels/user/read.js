@@ -1,27 +1,32 @@
+/* @flow */
 import User from 'models/user'
-export default async function (ctx) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  var tokenUser = token.get('user')
-  await user.setToken(token).canThrow('read')
-  var me = tokenUser && tokenUser.equals(user)
+
+import type { Context } from 'koa'
+import type Token from 'models/token'
+
+export default async function (ctx: Context) {
+  let user: User = ctx.state.user
+  let token: Token = ctx.state.token
+  let tokenUser: User = token.get('user')
+  await user.setToken(token).can('read')
+  let me: boolean = tokenUser && tokenUser.equals(user)
 
   user.populate(User.metaPopulate(me))
   if (tokenUser.get('admin')) {
-    user.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({path: 'application', select: {name: 1, slug: 1, content: 1}})
+    user.populate(User.refPopulate('creator')).populate(User.refPopulate('updater')).populate({ path: 'application', select: { name: 1, slug: 1, content: 1 } })
   }
-  await  user.execPopulate()
+  await user.execPopulate()
 
 
   ctx.vmState({
     ...user.toJSON(),
     cans: {
-      save: await user.can('save'),
-      username: await user.can('username'),
-      password: await user.can('password'),
-      black: await user.can('black'),
-      restore: await user.can('restore'),
+      save: await user.canBoolean('save'),
+      username: await user.canBoolean('save', { username: true }),
+      password: await user.canBoolean('save', { password: true }),
+      black: await user.canBoolean('black'),
+      admin: await user.canBoolean('admin'),
     },
-    authorize: me && token.get('authorize') ? token.get('authorize').toJSON() : void 0,
+    authorize: me && token.get('authorize') ? token.get('authorize').toJSON() : undefined,
   })
 }

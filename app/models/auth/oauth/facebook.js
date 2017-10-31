@@ -1,13 +1,13 @@
 /* @flow */
-import {facebook as config} from 'config/oauth'
+import { facebook as config } from 'config/oauth'
+
+import createError  from '../../createError'
+
 import Api from './api'
 
 config.appId = config.appId || config.app_id || config.clientId || config.client_id
 config.appSecret = config.appSecret || config.app_secret || config.clientSecret || config.client_secret
 config.scope = config.scope || config.scopes
-if (!(config.scope instanceof Array)) {
-  config.scope = config.scope.split(/[|, ]/)
-}
 
 export default class Facebook extends Api {
 
@@ -28,18 +28,18 @@ export default class Facebook extends Api {
     }
   }
 
-  async getAccessTokenByAuthorizationCode(params: Object = {}): Promise<accessTokenType> {
+  async getAccessTokenByAuthorizationCode(params: Object = {}): Promise<AccessToken> {
     if (!params.code || typeof params.code !== 'string') {
-      throw new Error('The "code" is empty')
+      throw createError(400, 'required', { path: 'code' })
     }
     if (!params.state || typeof params.state !== 'string') {
-      throw new Error('The "state" is empty')
+      throw createError(400, 'required', { path: 'state' })
     }
 
     let data = await this.getAuthorizeData(params)
 
     if (!data) {
-      throw new Error('"state" does not exist')
+      throw createError(400, 'notexist', { path: 'state' })
     }
 
     let query = {
@@ -51,7 +51,7 @@ export default class Facebook extends Api {
       client_secret: this.clientSecret,
       redirect_uri: this.redirectUri,
     }
-    let accessToken: accessTokenType = await this.request('GET', this.accessTokenPath, query)
+    let accessToken: AccessToken = await this.request('GET', this.accessTokenPath, query)
     return this.setAccessToken(accessToken) || {}
   }
 
@@ -123,16 +123,13 @@ export default class Facebook extends Api {
     }
 
     if (message) {
-      let e = new Error(message)
+      let props = {}
       if (body.error && typeof body.error === 'object' && body.error.code) {
-        e.code = Number(body.error.code)
+        props.code = body.error.code
       } else if (body.error_code) {
-        e.code = Number(body.error_code)
+        props.code = body.error_code
       }
-      if (response.statusCode >= 400) {
-        e.statusCode = response.statusCode
-      }
-      throw e
+      throw createError(response.statusCode >= 400 ? response.statusCode : 500, message, props)
     }
     return body
   }

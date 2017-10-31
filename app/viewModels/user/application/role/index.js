@@ -1,31 +1,30 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
+import bodyMiddleware from 'viewModels/middlewares/body'
 
 
-import role from './middlewares/role'
+import roleMiddleware from './middlewares/role'
 import list from './list'
 import read from './read'
 import save from './save'
 import del from './delete'
-import restore from './restore'
 
 const router = new Router
 
 
 router.get('/', list)
-router.get('/:role', role, read)
+router.get('/:role', roleMiddleware, read)
 
-router.use(body)
+router.use(bodyMiddleware)
 router.put(['/', '/save'], save)
 router.post(['/', '/save'], save)
 
-router.patch('/:role', role, save)
-router.post('/:role', role, save)
+router.patch('/:role', roleMiddleware, save)
+router.post('/:role', roleMiddleware, save)
 
 
-router.del('/:role', role, del)
-router.post('/:role/delete', role, del)
-router.post('/:role/restore', role, restore)
+router.del('/:role', roleMiddleware, del)
+router.post('/:role/delete', roleMiddleware, del)
 
 export default router

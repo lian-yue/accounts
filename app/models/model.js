@@ -1,11 +1,34 @@
 /* @flow */
-import httpErrors from 'http-errors'
 import configMongodb from 'config/mongodb'
-import mongoose, {Schema, Document} from 'mongoose'
+import mongoose, { Schema, Document, Error as MongooseError } from 'mongoose'
+import createError from './createError'
+import locale from './locale/default'
 
 mongoose.Promise = global.Promise
 
-const db = mongoose.connect(configMongodb, {useMongoClient: true, poolSize: 10})
+
+MongooseError.ValidatorError.prototype.formatMessage = function (message: string, props: Object) {
+  return locale.translation(['errors', props.type || message], message, props)
+}
+
+MongooseError.messages.general.default = locale.getLanguagePackValue(['errors', 'default'])
+MongooseError.messages.general.required = locale.getLanguagePackValue(['errors', 'required'])
+
+MongooseError.messages.Number.min = locale.getLanguagePackValue(['errors', 'min'])
+MongooseError.messages.Number.max = locale.getLanguagePackValue(['errors', 'max'])
+
+MongooseError.messages.Date.min = locale.getLanguagePackValue(['errors', 'min'])
+MongooseError.messages.Date.max = locale.getLanguagePackValue(['errors', 'max'])
+
+MongooseError.messages.String.enum = locale.getLanguagePackValue(['errors', 'enum'])
+MongooseError.messages.String.match = locale.getLanguagePackValue(['errors', 'match'])
+MongooseError.messages.String.minlength = locale.getLanguagePackValue(['errors', 'minlength'])
+MongooseError.messages.String.maxlength = locale.getLanguagePackValue(['errors', 'maxlength'])
+
+
+
+const db = mongoose.connect(configMongodb, { useMongoClient: true, poolSize: 10 })
+
 
 // 数字类型
 function Integer(key, options) {
@@ -38,7 +61,7 @@ Document.prototype.oncePost = function oncePost(fn: Function, ignoreError: boole
 }
 
 // $flow-disable-line
-Document.prototype.setToken = function setToken(token?: {modelName: 'Token'}) {
+Document.prototype.setToken = function setToken(token?: TokenModel) {
   this.$_token = token
   return this
 }
@@ -48,22 +71,12 @@ Document.prototype.getToken = function getToken() {
 }
 
 // $flow-disable-line
-Document.prototype.throw = function (): void {
-  throw httpErrors(...arguments)
-}
-
-// $flow-disable-line
-Document.prototype.throwTokenNotExists = function throwTokenNotExists(): void {
-  this.throw(400, '`token` does not exist')
-}
-
-// $flow-disable-line
 Document.prototype.can = async function can(options: string | string[] | {[key: string]: any}): Promise<void> {
   try {
     if (typeof options === 'string') {
       let fn = 'can' + options.replace(/(^|_|-)(.)/g, (value, value2, value3: string) => value3.toUpperCase())
       if (typeof this[fn] !== 'function') {
-        this.throw(500, `The "${fn}" method does not exist`)
+        throw createError(500, 'notexist', { path: 'method', value: fn })
       }
       let argsArray = [this.getToken()]
       if (arguments.length > 1) {
@@ -82,7 +95,7 @@ Document.prototype.can = async function can(options: string | string[] | {[key: 
         let name = options[i]
         let fn = 'can' + name.replace(/(^|_|-)(.)/g, (value, value2, value3: string) => value3.toUpperCase())
         if (typeof this[fn] !== 'function') {
-          this.throw(500, `The "${fn}" method does not exist`)
+          throw createError(500, 'notexist', { path: 'method', value: fn })
         }
         await this.cans[fn].apply(this, argsArray)
       }
@@ -91,7 +104,7 @@ Document.prototype.can = async function can(options: string | string[] | {[key: 
     for (let name in options) {
       let fn = 'can' + name.replace(/(^|_|-)(.)/g, (value, value2, value3) => value3.toUpperCase())
       if (typeof this[fn] !== 'function') {
-        this.throw(500, `The "${fn}" method does not exist`)
+        throw createError(500, 'notexist', { path: 'method', value: fn })
       }
       let argsArray = [this.getToken()]
       if (options[name]) {
@@ -181,7 +194,7 @@ Schema.prototype.postAsync = function postAsync(name: string, fn: Function) {
 }
 
 
-export default function (name: string, _schema: Object, options: Object = {}) {
+export default function <Doc> (name: string, _schema: Object, options: Object = {}): Class<Doc> {
   let schema = _schema
   if (schema instanceof Schema) {
     for (let key in options) {
@@ -206,7 +219,9 @@ export default function (name: string, _schema: Object, options: Object = {}) {
     }
   })
   if (process.env.NODE_ENV === 'development') {
+    // $flow-disable-line
     delete db.models[name]
   }
+
   return db.model(name, schema)
 }

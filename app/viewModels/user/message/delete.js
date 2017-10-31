@@ -1,8 +1,11 @@
-export default async function (ctx) {
-  var token = ctx.state.token
-  var message = ctx.state.message
-  await message.setToken(token).canThrow('delete')
-
+/* @flow */
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Message from 'models/message'
+export default async function (ctx: Context) {
+  let token: Token = ctx.state.token
+  let message: Message = ctx.state.message
+  await message.setToken(token).can('delete')
 
   message.set('deletedAt', new Date)
   await message.save()

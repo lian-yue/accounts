@@ -1,9 +1,10 @@
-import { createBundleRenderer } from 'vue-server-renderer'
-import cache from 'lru-cache'
-import moment from 'moment'
+/* @flow */
+// import { createBundleRenderer } from 'vue-server-renderer'
 
-moment.locale('zh-cn')
+import type { Context } from 'koa'
+// import cache from 'lru-cache'
 
+/*
 function createRenderer() {
   return createBundleRenderer(require('vue-ssr-bundle'), {
     template: require('./template')({}),
@@ -14,18 +15,18 @@ function createRenderer() {
   })
 }
 
-var renderer = createRenderer()
+let renderer = createRenderer()
+*/
 
-
-export default async function(ctx, next) {
-  if (['GET', 'HEAD'].indexOf(ctx.method) == -1 || ctx.path.split('/')[1] == 'oauth' || (ctx.query.format && ctx.query.format != 'vue' && ctx.query.format != 'vuejs')) {
+export default async function (ctx: Context, next: () => Promise<void>) {
+  if (['GET', 'HEAD'].indexOf(ctx.method) === -1 || (ctx.query.format && ctx.query.format !== 'vue' && ctx.query.format !== 'vuejs')) {
     await next()
     return
   }
 
-
+  /*
   try {
-    var body = await new Promise(function(resolve, reject) {
+    let body = await new Promise(function(resolve, reject) {
       renderer.renderToString({url : ctx.url, ctx}, function(err, body) {
         if (err) {
           reject(err)
@@ -36,7 +37,7 @@ export default async function(ctx, next) {
     });
   } catch (err) {
     if (!(err instanceof Error)) {
-      var e = new Error(err.message)
+      let e = new Error(err.message)
       e.stack = err.stack
       e.lineNumber = err.lineNumber
       e.fileName = err.fileName
@@ -44,7 +45,7 @@ export default async function(ctx, next) {
       if (err.name) {
         e.name = err.name
       }
-      for (var key in err) {
+      for (let key in err) {
         e[key] = err[key]
       }
       throw e
@@ -54,11 +55,12 @@ export default async function(ctx, next) {
 
   ctx.type = 'text/html'
   ctx.body = body
+  */
 }
 
 
-if(module.hot) {
-  module.hot.accept(['vue-ssr-bundle', './template'], function() {
-    renderer = createRenderer()
-  });
-}
+// if(module.hot) {
+//   module.hot.accept(['vue-ssr-bundle', './template'], function() {
+//     renderer = createRenderer()
+//   });
+// }

@@ -1,20 +1,25 @@
+/* @flow */
 import Auth from 'models/auth'
-export default async function (ctx, next) {
-  var user = ctx.state.user
-  var token = ctx.state.token
-  if (ctx.params.id) {
+
+import type { Context } from 'koa'
+import type User from 'models/user'
+export default async function (ctx: Context, next: () => Promise<void>) {
+  let user: User = ctx.state.user
+  if (ctx.params.auth) {
+    let auth: ?Auth
     try {
-      var auth = await Auth.findById(ctx.params.id).exec()
+      auth = await Auth.findById(ctx.params.auth).exec()
     } catch (e) {
-      e.state =  404
+      e.status = 404
       throw e
     }
     ctx.state.auth = auth
-    if (!ctx.state.auth) {
-      ctx.throw('认证不存在', 404)
+    if (!auth) {
+      ctx.throw(404, 'notexist', { path: 'auth' })
+      return
     }
     if (user && !user.equals(auth.get('user'))) {
-      ctx.throw('认证不存在', 404)
+      ctx.throw(404, 'notexist', { path: 'auth' })
     }
   } else {
     delete ctx.state.auth

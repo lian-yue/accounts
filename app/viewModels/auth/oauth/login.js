@@ -1,22 +1,17 @@
-import crypto from 'crypto'
-import cache from 'models/cache'
-export default async function(ctx, next) {
-  const token = ctx.state.token
-  const oauth = ctx.state.oauth
-  const column = ctx.params.column
+/* @flow */
+import type { Context } from 'koa'
+import type Api from 'models/auth/oauth/api'
 
-  var params = {
+export default async function (ctx: Context) {
+  const oauth: Api = ctx.state.oauth
+
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  oauth.state = void 0
-  var redirect_uri = await oauth.redirectUri()
+  let redirectUri = String(params.redirect_uri || '/')
+  redirectUri = await oauth.getAuthorizeUri({}, { redirectUri })
 
-
-  var selfRedirectKey = oauth.cacheKey + crypto.createHash('md5').update(oauth.state).digest("base64")
-  var selfRedirectUri = params.redirect_uri || '/'
-
-  await cache.multi().set(selfRedirectKey, selfRedirectUri).expire(selfRedirectKey, 3600).exec()
-  ctx.vmState({redirect_uri})
+  ctx.vmState({ redirectUri })
 }

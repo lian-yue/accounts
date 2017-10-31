@@ -1,23 +1,23 @@
+/* @flow */
 import * as oauths from 'models/auth/oauth'
 import oauthConfig from 'config/oauth'
-export default async function(ctx, next) {
-  const token = ctx.state.token
-  const column = ctx.params.column || ''
-  const OAuth = oauths[column]
+
+import type { Context } from 'koa'
+import type Token from 'models/token'
+import type Api from 'models/auth/oauth/api'
+export default async function (ctx: Context, next: () => Promise<void>) {
+  const token: Token = ctx.state.token
+  const column = String(ctx.params.column || '')
 
   ctx.set('Cache-Control', 'no-cache,must-revalidate,max-age=0')
-
-  if (!OAuth || !oauthConfig[column]) {
-    ctx.throw('暂不支持', 404)
+  let OAuth = oauths[column]
+  if (OAuth || !oauthConfig[column]) {
+    ctx.throw(403, 'match', { path: 'column' })
   }
 
-  const oauth = new OAuth(ctx.query, ctx.request.protocol + '://' + ctx.host + ctx.path.replace(/[^\/]+\/?$/g))
-
-  oauth.cacheKey = 'auth.oauth.' + column + token.get('id')
-  oauth.column = column
-  oauth.name = oauthConfig[column].name
-
+  const oauth: Api = new OAuth
+  oauth.setRedirectUri(ctx.request.protocol + '://' + ctx.request.host + ctx.request.path.replace(/[^\/]+\/?$/g, ''))
+  oauth.setKey(column + token.get('id'))
   ctx.state.oauth = oauth
-
   await next()
 }

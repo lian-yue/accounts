@@ -1,43 +1,38 @@
-import url from 'url'
-import crypto from 'crypto'
-import querystring from 'querystring'
+/* @flow */
+import type { Context } from 'koa'
+import type Api from 'models/auth/oauth/api'
+import type Token from 'models/token'
 
-import cache from 'models/cache'
+export default async function (ctx: Context) {
+  const token: Token = ctx.state.token
+  const oauth: Api = ctx.state.oauth
+  const column: string = ctx.params.column
 
-export default async function(ctx) {
-  const token = ctx.state.token
-  const oauth = ctx.state.oauth
-  const column = ctx.params.column
-
-  var params = {
+  let params = {
     ...ctx.request.query,
-    ...ctx.request.body,
+    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  if (params.state) {
-    oauth.state = params.state
-  } else if (params.oauth_token) {
-    oauth.state = params.oauth_token
-  }
 
-  var redirectKey = oauth.cacheKey + crypto.createHash('md5').update(oauth.state).digest("base64")
-  var redirectUri = await cache.get(redirectKey)
-  await cache.del(redirectKey)
-
-
-  if (!redirectUri && ctx.app.env != 'development') {
-    ctx.throw('认证超时', 403, {timeout: true})
-  }
+  let authorizeData = await oauth.getAuthorizeData(params)
+  let redirectUri = authorizeData && authorizeData.redirectUri ? authorizeData.redirectUri : '/'
 
   // 取消认证
-  if (!oauth.isAuthorize) {
-    ctx.throw('取消认证', 403, {cancel: true, redirectUri})
+  if (!oauth.isAuthorize(params)) {
+    ctx.throw(403, 'cancel', { path: 'auth', redirectUri })
   }
 
+  if (!authorizeData) {
+    ctx.throw(403, 'timeout', { path: 'auth', redirectUri })
+  }
+
+
+  let accessToken: Object
+  let userInfo: Object
   // 认证
   try {
-    var accessToken = await oauth.getAccessToken()
-    var userInfo = await oauth.getUserInfo()
+    accessToken = await oauth.getAccessTokenByAuthorizationCode(params)
+    userInfo = await oauth.getUserInfo()
   } catch (e) {
     e.redirectUri = redirectUri
     e.status = e.status || e.code
@@ -46,12 +41,12 @@ export default async function(ctx) {
   }
 
 
-  token.set('state.auth.' + column, {accessToken, userInfo, createdAt: new Date})
+  token.set('state.auth.' + column, { accessToken, userInfo, createdAt: new Date })
   await token.save()
 
   // 成功重定向
   ctx.vmState({
-    userInfo,
+    ...userInfo,
     redirectUri,
   })
 }

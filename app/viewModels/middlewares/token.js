@@ -1,83 +1,97 @@
+/* @flow */
 import User from 'models/user'
 import Token from 'models/token'
 import corsMiddleware from './cors'
 import applicationMiddleware from './application'
 
+import type { Context } from 'koa'
+import type Application from 'models/application'
 
-function getTokenKey(ctx, name) {
-  var key
-  var headerName = 'x-' +  name.replace(/_/g, '-')
+function getTokenKey(ctx: Context, name: string): string {
+  let key: mixed
+  let headerName = 'x-' + name.replace(/_/g, '-')
   if (ctx.request.query[name]) {
     key = ctx.request.query[name]
   } else if (ctx.request.header[headerName]) {
     key = ctx.request.header[headerName]
-  } else if (ctx.request.header.authorization && ctx.request.header.authorization.trim().substr(0, 7).toLocaleLowerCase() == 'bearer ') {
+  } else if (ctx.request.header.authorization && ctx.request.header.authorization.trim().substr(0, 7).toLocaleLowerCase() === 'bearer ') {
     key = ctx.request.header.authorization.trim().substr(7).trim()
   } else if (ctx.request.body instanceof Object && ctx.request.body[name]) {
     key = ctx.request.body[name]
   } else if (ctx.request.body instanceof Object && ctx.request.body.fields instanceof Object && ctx.request.body.fields[name]) {
     key = ctx.request.body.fields[name]
   }
-  return key
+  return String(key || '')
 }
 
-export default function(opt) {
-  opt = opt || {}
-  opt = {
-    types: ['access'],
-    required: true,
-    strict: true,
-    black: true,
-    cors: true,
-    auths: [],
-    ...opt,
+
+
+export default function ({
+  types: optTypes = ['access'],
+  required: optRequired = true,
+  strict: optStrict = true,
+  black: optBlack = true,
+  cors: optCors = true,
+  cookie: optCookie = false,
+  name: optName = optTypes[0] + '_token',
+  log: optLog = true,
+  application: optApplication,
+  auths: optAuths = [],
+  user: optUser,
+  authorize: optAuthorize,
+}: {
+  types?: string[],
+  required?: boolean,
+  strict?: boolean,
+  black?: boolean,
+  cors?: boolean,
+  cookie?: boolean,
+  authorize?: boolean,
+  user?: boolean,
+  log?: boolean,
+  name?: string,
+  application?: Object,
+  auths?: string[],
+} = {}): (ctx: Context, next?: () => Promise<void>) => Promise<Token | void> {
+  let optApplicationMiddleware
+  if (optApplication) {
+    optApplicationMiddleware = applicationMiddleware(optApplication)
   }
 
-  if (!Array.isArray(opt.types)) {
-    opt.types = [opt.types]
-  }
-
-  if (!opt.name) {
-    opt.name = opt.types[0] + '_token'
-  }
-
-  if (opt.application) {
-    opt.application = applicationMiddleware(opt.application)
-  }
-
-  return async function(ctx, next) {
-    var token = ctx.state.token
+  return async function (ctx: Context, next?: () => Promise<void>): Promise<Token | void> {
+    let token: ?Token = ctx.state.token
     delete ctx.state.token
-    if (opt.application) {
-      await opt.application(ctx, async function() {})
+    if (optApplicationMiddleware) {
+      await optApplicationMiddleware(ctx, async () => {})
     }
-    var application = ctx.state.application
-    var key = getTokenKey(ctx, opt.name)
-    var csrf
+    let application: ?Application = ctx.state.application
+    let key: string = getTokenKey(ctx, optName)
+    let csrf
     if (key) {
-    } else if (ctx.cookies.get(opt.name) && (opt.cookie || ['HEAD', 'GET', 'OPTIONS'].indexOf(ctx.method) != -1 || (csrf = getTokenKey(ctx, 'csrf_token')))) {
-      key = ctx.cookies.get(opt.name)
+      // key
+    } else if (ctx.cookies.get(optName) && (optCookie || ['HEAD', 'GET', 'OPTIONS'].indexOf(ctx.method) !== -1 || (csrf = getTokenKey(ctx, 'csrf_token')))) {
+      key = ctx.cookies.get(optName) || ''
     }
 
     // 空 并且不是必须
-    if (!key && !opt.required) {
+    if (!key && !optRequired) {
       if (!next) {
-        return false
+        return
       }
       await next()
       return
     }
 
-    key = String(key)
 
     // csrf 不正确
     if (csrf && csrf !== key.substr(0, 24)) {
-      ctx.throw('"csrf_token" parameter error', 400, {code: 'invalid_request', csrf: true})
+      ctx.throw(400, 'match', { path: 'csrf_token', code: 'invalid_request' })
     }
 
-    if (typeof key != 'string' || key.length <= 24) {
-      ctx.throw(`"${opt.name}" parameter error`, 400, {code: 'invalid_request'})
+    if (key.length <= 24) {
+      ctx.throw(400, 'match', { path: optName, code: 'invalid_request' })
     }
+
 
     if (!token || token.get('id') !== key.substr(0, 24)) {
       token = await Token.findById(key.substr(0, 24))
@@ -86,21 +100,23 @@ export default function(opt) {
           populate: [User.metaPopulate(true)]
         })
         .populate({
-          path:'application',
+          path: 'application',
         })
         .populate({
-          path:'authorize',
+          path: 'authorize',
         })
         .exec()
     }
 
 
+
     // 不存在
     if (!token || token.get('secret') !== key.substr(24)) {
-      ctx.throw(`"${opt.name}" does not exist`, 401, {code: 'invalid_client'})
+      ctx.throw(401, 'notexist', { path: optName, code: 'invalid_client' })
+      return
     }
 
-    var user = token.get('user')
+    let user: ?User = token.get('user')
     if (user) {
       user.setToken(token)
     }
@@ -110,85 +126,94 @@ export default function(opt) {
     }
 
     // 令牌类型
-    if (opt.types.indexOf(token.get('type')) == -1) {
-      ctx.throw(`"${opt.name}" does not exist`, 401, {code: 'invalid_client'})
+    if (optTypes.indexOf(token.get('type')) === -1) {
+      ctx.throw(401, 'notexist', { path: optName, code: 'invalid_client' })
     }
 
     // 令牌 和 application 不匹配
-    if (application && opt.authorize !== false && (!token.get('application') || !token.get('application').equals(application))) {
-      ctx.throw(`"${opt.name}" does not match`, 403, {code: 'invalid_client'})
+    if (application && optAuthorize !== false) {
+      try {
+        await token.can('application', { value: application })
+      } catch (e) {
+        e.code = 'invalid_client'
+        throw e
+      }
     }
 
     // 严格模式  application 必须 相同
-    if (opt.strict && Boolean(application) != Boolean(token.get('application'))) {
-      ctx.throw(`"${opt.name}" does not match`, 403, {code: 'invalid_client'})
+    if (optStrict && Boolean(application) !== Boolean(token.get('application'))) {
+      ctx.throw(403, 'match', { path: optName, code: 'invalid_client' })
     }
 
     // 令牌令牌 authorize 字段 匹配
-    if (typeof opt.authorize != 'undefined') {
-      if (opt.authorize) {
+    if (typeof optAuthorize !== 'undefined') {
+      if (optAuthorize) {
         if (!token.get('authorize')) {
-          ctx.throw('"authorize" does not match', 403, {code: 'invalid_client'})
+          ctx.throw(403, 'match', { path: 'authorize', code: 'invalid_client' })
         }
       } else if (token.get('authorize')) {
-        ctx.throw('"authorize" does not match', 403, {code: 'invalid_client'})
+        ctx.throw(403, 'match', { path: 'authorize', code: 'invalid_client' })
       }
     }
 
     // cors
-    if (opt.cors && token.get('application') && !(await corsMiddleware(ctx, token.get('application'))) && next) {
+    if (optCors && token.get('application') && !corsMiddleware(ctx, token.get('application')) && next) {
       return
     }
 
     // 被删除 or 已过期
     if (token.get('deletedAt') || token.get('expiredAt').getTime() < Date.now()) {
-      ctx.throw(`"${opt.name}" has expired`, 401, {code: 'invalid_grant', expired: true})
+      ctx.throw(401, 'hasexpire', { path: optName, code: 'invalid_grant' })
     }
 
     // application 无效
-    if (token.get('application') && (token.get('application').get('status') == 'block' || token.get('application').get('deletedAt'))) {
-      ctx.throw(`Invalid application`, 401, {code: 'invalid_grant', application: true})
+    if (token.get('application') && (token.get('application').get('status') === 'rejected' || token.get('application').get('status') === 'banned' || token.get('application').get('deletedAt'))) {
+      ctx.throw(401, 'black', { path: optName, code: 'invalid_grant' })
     }
 
     // 认证被删除
     if (token.get('authorize') && token.get('authorize').get('deletedAt')) {
-      ctx.throw(`"${opt.name}" has expired`, 401, {code: 'invalid_grant', expired: true, authorize: true})
+      ctx.throw(401, 'hasexpire', { path: optName, code: 'invalid_grant' })
     }
 
 
     // auths
-    var applicationAuths = application || token.get('application')
+    let applicationAuths = application || token.get('application')
     if (applicationAuths) {
-      for (let i = 0; i < opt.auths.length; i++) {
-        if (!applicationAuths.get('auths').get(opt.auths[i])) {
-          ctx.throw('The authorization mode is not allowed', 400, {code: 'unsupported_response_type'})
+      for (let i = 0; i < optAuths.length; i++) {
+        if (!applicationAuths.get('auths').get(optAuths[i])) {
+          ctx.throw(400, 'match', { path: 'auths', code: 'unsupported_response_type' })
         }
       }
     }
 
     // 是否要登陆
-    if (typeof opt.user != 'undefined') {
-      if (opt.user) {
-        if (!user) {
-          ctx.throw('You have not logged in', 401, {code: 'invalid_grant', login: true})
-        }
-      } else if (user) {
-        ctx.throw('You are logged in', 403, {code: 'invalid_grant', login: true})
+    if (typeof optUser !== 'undefined') {
+      try {
+        await token.can('user', { value: optUser })
+      } catch (e) {
+        e.code = 'invalid_grant'
+        throw e
       }
     }
 
     // 黑名单
-    if (opt.black && token.get('application') && user && user.get('black')) {
-      ctx.throw(`Your account is blocked because of "${user.get('reason')}"`, 403, {code: 'invalid_grant', black: true})
+    if (optBlack && token.get('application') && user) {
+      try {
+        await token.can('user', { value: true, black: true })
+      } catch (e) {
+        e.code = 'invalid_grant'
+        throw e
+      }
     }
 
     // 日志
-    if (opt.log !== false) {
-      token.updateLog(ctx, opt.log)
+    if (optLog !== false) {
+      token.updateLog(ctx, optLog)
     }
 
     // 过期时间
-    var date = new Date
+    let date = new Date
     if (token.get('renewal') && (token.get('expiredAt').getTime() - 86400 * 1000 * 20) < date.getTime()) {
       date.setTime(date.getTime() + 1000 * 86400 * 30)
       token.set('expiredAt', date)

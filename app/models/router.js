@@ -1,18 +1,25 @@
 /* @flow */
 import pathToRegExp from 'path-to-regexp'
-import queryString from 'query-string'
+import queryString from 'querystring'
+
+import type { Context } from 'koa'
 
 const debug = require('debug')('vm:router')
 
+type Middleware = (ctx: Context, next?: () => Promise<void>) => Promise<void> | void
+
+// eslint-disable-next-line
+type Middlewares = Array<Middleware | Router | string | RegExp | Array<string | RegExp> | Object>
+
 export default class Router {
 
-  stack: Array<Route> = []
+  stack: Route[] = []
 
   allowMethods: string[] = ['HEAD', 'OPTIONS', 'GET', 'PUT', 'PATCH', 'POST', 'DELETE']
 
 
-  methodMiddlewares(method: string, path: string) {
-    let middlewares: any[] = []
+  methodMiddlewares(method: string, path: string): Array<Middleware | {route: Route, matches: Object}> {
+    let middlewares: Object[] = []
 
     let isBreak: boolean = false
     for (let i = 0; i < this.stack.length; i++) {
@@ -46,7 +53,7 @@ export default class Router {
     return middlewares
   }
 
-  async match(ctx: Object, method: string = 'GET', path: string = '/', _query: Object | string = {}, body?: any, next: Function = () => {}) {
+  async match(ctx: Context, method: string = 'GET', path: string = '/', _query: Object | string = {}, body?: any, next: () => void): Object | void {
     let query = _query
     if (typeof query === 'string') {
       query = queryString.parse(query)
@@ -56,6 +63,7 @@ export default class Router {
       ctx.throw(405)
     }
 
+    // 如果全是 use 就。。404
     let middlewares = this.methodMiddlewares(method, path)
     let is404 = true
     for (let i = 0; i < middlewares.length; i++) {
@@ -80,9 +88,8 @@ export default class Router {
       path: req.path,
       query: req.query,
       body: req.body,
-      vmState: req.vmState,
+      vmState: ctx.state.vm,
     }
-
     delete ctx.state.vm
     ctx.params = {}
     if (method !== req.method) {
@@ -105,18 +112,19 @@ export default class Router {
       if (!fn) {
         return Promise.resolve(next())
       }
-      if (typeof fn === 'object') {
-        if (fn.matches) {
-          let matches = fn.matches.slice(1)
-          for (let i = 0; i < matches.length; i++) {
-            if (fn.route.paramNames[i]) {
-              ctx.params[fn.route.paramNames[i].name] = matches[i] ? decodeURIComponent(matches[i]) : matches[i]
-            }
+      if (typeof fn === 'function') {
+        return Promise.resolve(fn(ctx, dispatch))
+      }
+      if (fn.matches) {
+        let matches = fn.matches.slice(1)
+        for (let i = 0; i < matches.length; i++) {
+          if (fn.route.paramNames[i]) {
+            ctx.params[fn.route.paramNames[i].name] = matches[i] ? decodeURIComponent(matches[i]) : matches[i]
           }
         }
         return dispatch()
       }
-      return Promise.resolve(fn(ctx, dispatch))
+      return dispatch()
     }
 
     let state
@@ -145,12 +153,10 @@ export default class Router {
   }
 
 
-  middleware = async (ctx: Object, next: Function) => {
+  middleware = async (ctx: Context, next: () => Promise<void>): Promise<void> => {
     let req = ctx.request
-    let isNext = false
-    let state = await this.match(ctx, req.method, req.path, req.query, req.body, function () {
-      isNext = true
-    })
+    let isNext: boolean = false
+    let state = await this.match(ctx, req.method, req.path, req.query, req.body, () => { isNext = true })
 
     if (isNext) {
       await next()
@@ -165,62 +171,62 @@ export default class Router {
   }
 
 
-  all(...middleware: any[]) {
+  all(...middleware: Middlewares) {
     return this.register({
       middleware,
     })
   }
 
-  get(...middleware: any[]) {
+  get(...middleware: Middlewares) {
     return this.register({
       methods: ['GET', 'HEAD'],
       middleware,
     })
   }
 
-  post(...middleware: any[]) {
+  post(...middleware: Middlewares) {
     return this.register({
       methods: ['POST'],
       middleware,
     })
   }
 
-  put(...middleware: any[]) {
+  put(...middleware: Middlewares) {
     return this.register({
       methods: ['PUT'],
       middleware,
     })
   }
 
-  patch(...middleware: any[]) {
+  patch(...middleware: Middlewares) {
     return this.register({
       methods: ['PATCH'],
       middleware,
     })
   }
 
-  del(...middleware: any[]) {
+  del(...middleware: Middlewares) {
     return this.register({
       methods: ['DELETE'],
       middleware,
     })
   }
 
-  options(...middleware: any[]) {
+  options(...middleware: Middlewares) {
     return this.register({
       methods: ['OPTIONS'],
       middleware,
     })
   }
 
-  opt(...middleware: any[]) {
+  opt(...middleware: Middlewares) {
     return this.register({
       methods: ['OPTIONS'],
       middleware,
     })
   }
 
-  use(...middleware: any[]) {
+  use(...middleware: Middlewares) {
     return this.register({
       use: true,
       end: false,
@@ -228,25 +234,35 @@ export default class Router {
     })
   }
 
-  register(opts: Object = {}) {
-    if (typeof opts.middleware[0] === 'string' || opts.middleware[0] instanceof RegExp || Array.isArray(opts.middleware[0])) {
-      let path = opts.middleware.shift()
+  register(opts: {
+      middleware: Middlewares,
+      methods?: string[],
+      path?: string | RegExp | Array<string | RegExp>,
+      name?: string,
+    } = {
+      methods: [],
+      middleware: []
+    }) {
+    let path = opts.middleware[0]
+    if (typeof opts.path === 'string') {
       opts.name = opts.path
+    }
+    if (typeof path === 'string' || path instanceof RegExp || Array.isArray(path)) {
       opts.path = path
+      opts.middleware.shift()
     }
 
-    // options
-    if (opts.middleware.length && typeof opts.middleware[opts.middleware.length - 1] === 'object' && opts.middleware[opts.middleware.length - 1].constructor === Object) {
-      let newOpts = opts.middleware[opts.middleware.length - 1]
-      if (newOpts && typeof newOpts === 'object' && (!newOpts.constructor || newOpts.constructor === Object)) {
-        opts.middleware.pop()
-      }
+    // 覆盖 options
+    let newOpts = opts.middleware[opts.middleware.length - 1]
+    if (!(newOpts instanceof Router) && !Array.isArray(newOpts) && typeof newOpts !== 'function' && typeof newOpts === 'object') {
+      opts.middleware.pop()
+      // $flow-disable-line
       Object.assign(opts, newOpts)
     }
 
     if (Array.isArray(opts.path)) {
-      opts.path.forEach((path) => {
-        this.register(Object.assign({}, opts, {path}))
+      opts.path.forEach(value => {
+        this.register({ ...opts, path: value })
       })
     } else {
       this.stack.push(new Route(opts))
@@ -262,19 +278,17 @@ class Route {
 
   paramNames: Array<Object> = []
 
-  middleware: Array<Route | Function> = []
+  middleware: Array<Middleware | Route> = []
 
   regexp: ?RegExp
 
-  constructor(opts: Object = {}) {
+  constructor(opts: Object = {}): void {
     for (let key in opts) {
       if (opts[key] !== null && opts[key] !== undefined) {
         // $flow-disable-line
         this[key] = opts[key]
       }
     }
-
-    this.middleware = Array.isArray(this.middleware) ? this.middleware : [this.middleware]
     if (this.path) {
       this.paramNames = []
       this.regexp = pathToRegExp(this.path, this.paramNames, opts)

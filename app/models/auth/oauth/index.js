@@ -1,7 +1,7 @@
 /* @flow */
 import google from './google'
 import facebook from './facebook'
-// import twitter from './twitter'
+import twitter from './twitter'
 import qq from './qq'
 // import wechat from './wechat'
 import weibo from './weibo'
@@ -16,5 +16,5 @@ export {
   baidu,
   google,
   facebook,
-  // twitter,
+  twitter,
 }

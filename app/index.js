@@ -3,120 +3,108 @@ import path        from 'path'
 import Koa         from 'koa'
 import koaStatic   from 'koa-static'
 import statuses    from 'statuses'
-import httpErrors  from 'http-errors'
 
 import moment      from 'moment'
-
-import 'source-map-support/register'
 
 import packageInfo from 'package'
 
 global.__SERVER__ = true
 
-/* eslint-disable */
-let models = require('models')
-/* eslint-enable */
+let models = require('./models')
 let viewModels = require('viewModels').default
 
 if (module.hot) {
   module.hot.accept(['models', 'viewModels'], function (): void {
-    models = require('models')
+    models = require('./models')
     viewModels = require('viewModels').default
   })
 }
 
-
 const app = new Koa
 
 app.env = process.env.NODE_ENV || 'production'
+
+
 app.context.onerror = function onerror(e: mixed): void {
-  let err = e
-  if (!err) {
+  if (e === null) {
     return
-  } else if (typeof err === 'number') {
-    err = httpErrors(err)
-  } else if (err instanceof httpErrors) {
-    // has httpErrors
-  } else if (typeof err === 'object') {
-    let status: number
-    let message: string
-    if (typeof err.status === 'number' && err.status >= 400 && err.status < 600) {
-      status = err.status
-    } else if (typeof err.statusCode === 'number' && err.statusCode >= 400 && err.statusCode < 600) {
-      status = err.statusCode
-    } else if (err.code === 'ENOENT') {
-      // ENOENT support
-      status = 404
-    } else if (err.code === 'HPE_INVALID_EOF_STATE' || err.code === 'ECONNRESET' || err.message === 'Request aborted') {
-      status = 408
-    } else if (err.name === 'ValidationError' || err.name === 'ValidatorError' || err.code === 'ValidationError' || err.code === 'ValidatorError') {
-      status = 403
-    } else if (this.status >= 400) {
-      status = this.status
-    } else {
-      status = 500
-    }
-    message = String(err.message || statuses[status] || 'Server error')
-    err = httpErrors(status, message, err)
-  } else {
-    err = httpErrors(500, String(err))
   }
 
+  let error = models.createError(e)
+
+  let isSent = this.headerSent || !this.writable
 
   // 设置状码
-  if (!this.status || this.status < 300 || this.status === 404 || err.status >= 500) {
-    this.status = err.status
+  if (isSent) {
+    // 已发送
+  } else if (!this.status || this.status < 300 || this.status === 404 || error.status >= 500) {
+    this.status = error.status
   }
 
   // 错误事件
-  this.app.emit('error', err, this)
+  this.app.emit('error', error, this)
 
-  // 408 链接被断开直接返回
-  if (err.status === 408) {
+  // 408 主动断开, 已发送 headers, 不可写
+  if (isSent || error.status === 408) {
+    this.res.end()
     return
   }
 
-
-  // 不可写 已发送 headers
-  if (this.headerSent || !this.writable) {
-    err.headerSent = true
-    return
-  }
-
-  // 不是 development 模式
-  if ((err.status === 500 && app.env !== 'development') || !err.message) {
-    err.message = statuses[err.status]
+  // 发布版不显示 500 错误信息
+  if (app.env !== 'development' && error.status === 500) {
+    error.message = statuses[error.status]
   }
 
   // 自定义 headers
-  if (err.headers) {
-    this.set(err.headers)
-    delete err.headers
+  if (error.headers) {
+    this.set(error.headers)
+    // $flow-disable-line
+    delete error.headers
   }
 
-  // 消息归类
-  if (err.messages) {
+  // 消息列表
+  if (error.messages) {
     // 存在 messages
-  } else if (err.name === 'ValidationError' && err.errors) {
-    err.messages = []
-    for (const key in err.errors) {
-      const message = err.errors[key]
-      err.messages.push({
-        code: message.code || message.name,
-        path: message.path || key,
-        message: message.message,
-        ...message,
+  } else if (error.name === 'ValidationError' && error.errors && typeof error.errors === 'object') {
+    // $flow-disable-line
+    error.messages = []
+    for (const fullpath in error.errors) {
+      let value = error.errors[fullpath]
+      if (!value) {
+        continue
+      }
+      value = models.createError(value)
+      // $flow-disable-line
+      error.messages.push({
+        fullpath,
+        path: value.path || fullpath,
+        type: value.type || value.kind || undefined,
+        name: value.name,
+        ...value
       })
     }
-    delete err.errors
+    // $flow-disable-line
+    delete error.properties.errors
+    delete error.errors
   } else {
-    err.messages = [
+    // $flow-disable-line
+    error.messages = [
       {
-        message: err.message,
-        ...err,
-      },
+        path: error.path || undefined,
+        type: error.type || undefined,
+        name: error.name,
+        ...models.createError(error),
+      }
     ]
   }
+
+  this.type = 'json'
+  this.res.end(JSON.stringify({
+    error: error.message,
+    status: error.status,
+    name: error.name,
+    ...error
+  }))
 }
 
 app.context.vmState = function vmState(state: Object = {}, status: number = 200): Object {
@@ -162,10 +150,8 @@ app.context.viewModel = function viewModel() {
   return viewModels.match(this, ...arguments)
 }
 
-
 // public file
 app.use(koaStatic(path.join(__dirname, '../public')))
-
 
 
 // access log
@@ -186,7 +172,7 @@ app.use(async function (ctx, next) {
 app.use(async function (ctx, next) {
   let clear = setTimeout(function () {
     clear = null
-    ctx.onerror(httpErrors(502, 'Request timeout'))
+    ctx.onerror(models.createError(504, 'Request timeout'))
   }, 60000)
 
   try {
@@ -218,14 +204,14 @@ if (process.env.NODE_ENV === 'development') {
     await next()
   })
 
-  // app.use(function(ctx, next) {
-  //   return require('views/vue').default(ctx, next)
-  // })
+  app.use(function (ctx, next) {
+    return require('views/vue').default(ctx, next)
+  })
   app.use(function (ctx, next) {
     return viewModels.middleware(ctx, next)
   })
 } else {
-  // app.use(require('views/vue').default)
+  app.use(require('views/vue').default)
   app.use(viewModels.middleware)
 }
 
@@ -236,12 +222,12 @@ app.use(function (ctx) {
 
 
 // 错误捕获
-app.on('error', function (err: Error, ctx): void {
+app.on('error', function (error: Error, ctx): void {
   let date: string = moment().format('YYYY-MM-DD hh:mm:ss')
-  if (!err.status || err.status >= 500) {
-    console.error(date, 'server error :', err, ctx)
+  if (!error.status || Number(error.status) >= 500) {
+    console.error(date, 'server error :', error, ctx)
   } else {
-    console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${err.message}`)
+    console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${error.message}`)
   }
 })
 

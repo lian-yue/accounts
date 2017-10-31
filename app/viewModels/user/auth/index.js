@@ -1,7 +1,8 @@
-import Router from 'viewModels/router'
+/* @flow */
+import Router from 'models/router'
 
-import body from 'viewModels/middlewares/body'
-import rateLimit from 'viewModels/middlewares/rateLimit'
+import bodyMiddleware from 'viewModels/middlewares/body'
+import rateLimitMiddleware from 'viewModels/middlewares/rateLimit'
 
 import authMiddleware from './middlewares/auth'
 
@@ -11,17 +12,16 @@ import save from './save'
 import del from './delete'
 import verification from './verification'
 
-
-
+import type { Context } from 'koa'
 
 
 const router = new Router
 
 
-const rateLimitSave = rateLimit({
-  name:'auth_save',
+const rateLimitSaveMiddleware = rateLimitMiddleware({
+  name: 'auth_save',
   limit: 20,
-  key(ctx) {
+  key(ctx: Context) {
     if (ctx.state.auth) {
       return ctx.state.auth.get('user').toString()
     }
@@ -32,10 +32,10 @@ const rateLimitSave = rateLimit({
   }
 })
 
-const rateLimitVerification = rateLimit({
-  name:'auth_verification',
+const rateLimitVerification = rateLimitMiddleware({
+  name: 'auth_verification',
   limit: 12,
-  key(ctx) {
+  key(ctx: Context) {
     if (ctx.state.auth) {
       return ctx.state.auth.get('user').toString()
     }
@@ -45,9 +45,9 @@ const rateLimitVerification = rateLimit({
     return false
   }
 }, {
-  name:'auth_verification_success',
+  name: 'auth_verification_success',
   limit: 1,
-  key(ctx) {
+  key(ctx: Context) {
     if (ctx.state.auth) {
       return ctx.state.auth.get('user').toString()
     }
@@ -64,10 +64,10 @@ const rateLimitVerification = rateLimit({
 router.get('/', list)
 router.get('/:auth', authMiddleware, read)
 
-router.use(body)
+router.use(bodyMiddleware)
 
-router.put(['/', '/save'], rateLimitSave, save)
-router.post(['/', '/save'], rateLimitSave, save)
+router.put(['/', '/save'], rateLimitSaveMiddleware, save)
+router.post(['/', '/save'], rateLimitSaveMiddleware, save)
 router.post('/verification', rateLimitVerification, verification)
 
 router.use(authMiddleware)

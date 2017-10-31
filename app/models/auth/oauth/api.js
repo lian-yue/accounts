@@ -2,6 +2,7 @@
 import crypto from 'crypto'
 import querystring from 'querystring'
 import request from 'request-promise'
+import createError  from '../../createError'
 
 import cache from '../../cache'
 
@@ -16,7 +17,7 @@ export default class Api {
 
   clientSecret: string
 
-  accessToken: accessTokenType | null = null
+  accessToken: AccessToken | null = null
 
   timeout: number = 15000
 
@@ -39,6 +40,7 @@ export default class Api {
 
   data: Object
 
+
   constructor(clientId: string, clientSecret: string) {
     this.clientId = clientId
     this.clientSecret = clientSecret
@@ -46,33 +48,30 @@ export default class Api {
   }
 
 
-  getAccessToken(expire: boolean = false): accessTokenType | null {
+  getAccessToken(expire: boolean = false): AccessToken | null {
     let accessToken = this.accessToken
     if (!accessToken) {
       return null
     }
     if (expire && accessToken.expires_in && accessToken.created_at && (accessToken.created_at.getTime() + Number(accessToken.expires_in) * 1000) < Date.now()) {
-      let e = new Error('"access_token" has expired')
-      e.statusCode = 403
-      throw e
+      throw createError(403, 'hasexpire', { path: 'access_token' })
     }
     return accessToken
   }
 
-
-  setAccessToken(accessToken: ?accessTokenType): accessTokenType | null {
+  setAccessToken(accessToken: ?AccessToken): AccessToken | null {
     if (!accessToken) {
       // null
     } else if (this.requestTokenPath) {
       if (!accessToken.oauth_token_secret) {
-        throw new Error('The "oauth_token_secret" is empty')
+        throw createError(500, 'notexist', { path: 'oauth_token_secret' })
       }
       if (!accessToken.oauth_token) {
-        throw new Error('The "oauth_token" is empty')
+        throw createError(500, 'notexist', { path: 'oauth_token' })
       }
     } else if (!accessToken.access_token) {
       if (!accessToken.access_token) {
-        throw new Error('The "access_token" is empty')
+        throw createError(500, 'notexist', { path: 'access_token' })
       }
     }
     if (accessToken && !accessToken.created_at) {
@@ -84,17 +83,17 @@ export default class Api {
 
 
 
-  async getAccessTokenByAuthorizationCode(params: Object = {}): Promise<accessTokenType> {
+  async getAccessTokenByAuthorizationCode(params: Object = {}): Promise<AccessToken> {
     if (this.requestTokenPath) {
       if (!params.oauth_token || typeof params.oauth_token !== 'string') {
-        throw new Error('The "oauth_token" is empty')
+        throw createError(400, 'required', { path: 'oauth_token' })
       }
       if (!params.oauth_verifier) {
-        throw new Error('The "oauth_verifier" is empty')
+        throw createError(400, 'required', { path: 'oauth_verifier' })
       }
       let data = await this.getAuthorizeData(params)
       if (!data || !data.oauth_token_secret) {
-        throw new Error('The "oauth_token_secret" is empty')
+        throw createError(403, 'notexist', { path: 'oauth_token_secret' })
       }
 
       let accessToken = await this.request('POST', this.accessTokenPath, {}, {}, {}, {
@@ -110,15 +109,15 @@ export default class Api {
     }
 
     if (!params.code || typeof params.code !== 'string') {
-      throw new Error('The "code" is empty')
+      throw createError(400, 'required', { path: 'code' })
     }
     if (!params.state || typeof params.state !== 'string') {
-      throw new Error('The "state" is empty')
+      throw createError(400, 'required', { path: 'state' })
     }
 
     let data = await this.getAuthorizeData(params)
     if (!data) {
-      throw new Error('"state" does not exist')
+      throw createError(403, 'notexist', { path: 'state', value: params.state })
     }
 
     let body = {
@@ -130,11 +129,11 @@ export default class Api {
       client_secret: this.clientSecret,
       redirect_uri: this.redirectUri,
     }
-    let accessToken: accessTokenType = await this.request('POST', this.accessTokenPath, {}, body)
+    let accessToken: AccessToken = await this.request('POST', this.accessTokenPath, {}, body)
     return this.setAccessToken(accessToken) || {}
   }
 
-  getAccessTokenByPassowrd(params: Object): Promise<accessTokenType> {
+  getAccessTokenByPassowrd(params: Object): Promise<AccessToken> {
     let body = {
       ...params,
       grant_type: 'password',
@@ -143,19 +142,19 @@ export default class Api {
       redirect_uri: this.redirectUri,
     }
     if (!body.username) {
-      throw new Error('The username is empty')
+      throw createError(400, 'required', { path: 'username' })
     }
     if (body.password) {
-      throw new Error('The password is empty')
+      throw createError(400, 'required', { path: 'password' })
     }
 
-    return this.request('POST', this.accessTokenPath, {}, body).then((accessToken: accessTokenType) => {
+    return this.request('POST', this.accessTokenPath, {}, body).then((accessToken: AccessToken) => {
       return this.setAccessToken(accessToken) || {}
     })
   }
 
 
-  getAccessTokenByClientCredentials(params: Object = {}): Promise<accessTokenType> {
+  getAccessTokenByClientCredentials(params: Object = {}): Promise<AccessToken> {
     let body = {
       ...params,
       grant_type: 'client_credentials',
@@ -166,9 +165,9 @@ export default class Api {
   }
 
 
-  getAccessTokenByRefreshToken(params: Object = {}): Promise<accessTokenType> {
+  getAccessTokenByRefreshToken(params: Object = {}): Promise<AccessToken> {
     if (this.requestTokenPath) {
-      throw new Error('oauth 1.* does not support')
+      throw createError(500, 'oauth 1.* does not support')
     }
     params.grant_type = 'refresh_token'
     params.client_id = this.clientId
@@ -177,11 +176,11 @@ export default class Api {
     let accessToken = this.getAccessToken()
     if (!params.refresh_token) {
       if (!accessToken || !accessToken.refresh_token) {
-        throw new Error('Not configuration refresh_token')
+        throw createError(500, 'notexist', { path: 'refresh_token' })
       }
       params.refresh_token = accessToken.refresh_token
     }
-    return this.request('POST', this.accessTokenPath, {}, params).then((newAccessToken: accessTokenType) => {
+    return this.request('POST', this.accessTokenPath, {}, params).then((newAccessToken: AccessToken) => {
       if (!newAccessToken.refresh_token) {
         newAccessToken.refresh_token = params.refresh_token
       }
@@ -191,7 +190,7 @@ export default class Api {
 
   revokeToken(params: Object = {}): Promise<Object> {
     if (!this.revokeTokenPath) {
-      throw new Error('`revokeTokenPath` is not configured')
+      throw createError(500, 'notexist', { path: 'revokeTokenPath' })
     }
     return this.api('POST', this.revokeTokenPath, {}, params)
   }
@@ -274,12 +273,12 @@ export default class Api {
   keyAuthorizeData(params: Object = {}): string {
     if (this.requestTokenPath) {
       if (!params.oauth_token || typeof params.oauth_token !== 'string') {
-        throw new Error('The "oauth_token" is empty')
+        throw createError(400, 'required', { path: 'oauth_token' })
       }
       return 'data.' + params.oauth_token
     }
     if (!params.state || typeof params.state !== 'string') {
-      throw new Error('The "state" is empty')
+      throw createError(400, 'required', { path: 'state' })
     }
     return 'data.' + params.state
   }
@@ -298,14 +297,14 @@ export default class Api {
 
   async getAuthorizeUri(params: Object = {}, data: Object = {}): Promise<string> {
     if (this.requestTokenPath) {
-      let requestToken: accessTokenType = await this.request('POST', this.requestTokenPath, {}, {}, {}, {
+      let requestToken: AccessToken = await this.request('POST', this.requestTokenPath, {}, {}, {}, {
         oauth: {
           callback: this.redirectUri,
           consumer_key: this.clientId,
           consumer_secret: this.clientSecret,
         }
       })
-      await this.setCache(this.keyAuthorizeData(requestToken), {...data, oauth_token_secret: requestToken.oauth_token_secret}, 3600)
+      await this.setCache(this.keyAuthorizeData(requestToken), { ...data, oauth_token_secret: requestToken.oauth_token_secret }, 3600)
 
       return this.getUri(this.authorizePath, {
         ...params,
@@ -314,7 +313,7 @@ export default class Api {
     }
 
     let state = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2)
-    await this.setCache(this.keyAuthorizeData({state}), data, 3600)
+    await this.setCache(this.keyAuthorizeData({ state }), data, 3600)
 
     return this.getUri(this.authorizePath, {
       ...params,
@@ -336,7 +335,7 @@ export default class Api {
         if (!oauth_token || !oauth_token_secret) {
           let accessToken = this.getAccessToken(true)
           if (!accessToken || !accessToken.oauth_token || !accessToken.oauth_token_secret) {
-            throw new Error('Not configuration access_token')
+            throw createError(500, 'notexist', { path: 'access_token' })
           }
           oauth_token = accessToken.oauth_token
           oauth_token_secret = accessToken.oauth_token_secret
@@ -357,7 +356,7 @@ export default class Api {
     } else if (!params.access_token && !body.access_token) {
       let accessToken = this.getAccessToken(true)
       if (!accessToken || !accessToken.access_token) {
-        throw new Error('Not configuration access_token')
+        throw createError(500, 'notexist', { path: 'access_token' })
       }
       if (method === 'GET' || method === 'HEAD') {
         params.access_token = accessToken.access_token
@@ -388,7 +387,7 @@ export default class Api {
   }
 
 
-  getUserInfo(body: string): Promise<Object> {
+  getUserInfo(): Promise<Object> {
     return Promise.resolve({})
   }
 
@@ -433,14 +432,11 @@ export default class Api {
     }
 
     if (message) {
-      let e = new Error(message)
+      let props = {}
       if (body.error_code) {
-        e.code = Number(body.error_code)
+        props.code = body.error_code
       }
-      if (response.statusCode >= 400) {
-        e.statusCode = response.statusCode
-      }
-      throw e
+      throw createError(response.statusCode >= 400 ? response.statusCode : 500, message, props)
     }
     return body
   }
@@ -452,6 +448,7 @@ export default class Api {
     if (method === 'POST' && !headers['Content-Type']) {
       headers['Content-Type'] = 'application/x-www-form-urlencoded'
     }
+
     let bodyString: string = querystring.stringify(body)
 
     let url = this.getUri(path, params)

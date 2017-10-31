@@ -1,21 +1,26 @@
+/* @flow */
 import nodemailer from 'nodemailer'
-import {Schema} from 'mongoose'
+import { Schema, type MongoId } from 'mongoose'
 import emailConfig from 'config/email'
 import phoneConfig from 'config/phone'
 import siteConfig from 'config/site'
 
+import  { matchEmail, matchMobilePhone } from './utils'
+
+import locale from './locale/default'
+import createError from './createError'
+
 import model from './model'
 
-import * as validator from './validator'
 
-import {TopClient} from './topClient'
+import { TopClient } from './topClient'
 
-const email = nodemailer.createTransport(emailConfig)
+const emailSend = nodemailer.createTransport(emailConfig)
 
-const phone = new TopClient(phoneConfig)
+const phoneSend = new TopClient(phoneConfig)
 
 
-const schema = new Schema({
+const schema: Schema<VerificationModel> = new Schema({
   ip: {
     type: String,
     default: '0.0.0.0',
@@ -36,39 +41,32 @@ const schema = new Schema({
   type: {
     type: String,
     index: true,
-    required: [true, '验证类型不能为空'],
+    required: true,
   },
   to: {
     type: String,
-    required: [true, '发送地址不能为空'],
+    required: true,
     validate: [
       {
         validator(to) {
-          if (this.get('toType') !== 'email') {
-            return true
+          let toType: string = this.get('toType')
+          let value
+          switch (toType) {
+            case 'email':
+              value = matchEmail(to)
+              break
+            case 'sms':
+              value = matchMobilePhone(to)
+              toType = 'phone'
+              break
           }
-          let value = validator.email(to)
           if (!value) {
-            return false
+            this.invalidate(toType, locale.getLanguagePackValue(['errors', 'match']), to, 'match')
+            return
           }
           this.set('to', value)
           return true
         },
-        message: '发送地址不是电子邮箱 ({PATH})',
-      },
-      {
-        validator(to) {
-          if (this.get('toType') !== 'sms') {
-            return true
-          }
-          let value = validator.mobilePhone(to)
-          if (!value) {
-            return false
-          }
-          this.set('to', value)
-          return true
-        },
-        message: '发送地址不是手机号 ({PATH})',
       },
     ]
   },
@@ -79,6 +77,10 @@ const schema = new Schema({
   },
   code: {
     type: String,
+    default() {
+      let code = '000000' + Math.round(Math.random() * 999999).toString()
+      return code.substr(code.length - 6)
+    }
   },
   error: {
     type: Number,
@@ -89,12 +91,9 @@ const schema = new Schema({
   },
   nickname: {
     type: String,
-    required: true,
+    default: '',
   },
-  used: {
-    type: String,
-    required: true,
-  },
+
   createdAt: {
     type: Date,
     default: Date.now,
@@ -102,7 +101,7 @@ const schema = new Schema({
   expiredAt: {
     type: Date,
     index: true,
-    default: () => {
+    default() {
       let date = new Date()
       date.setTime(date.getTime() + 1000 * 600)
       return date
@@ -115,27 +114,24 @@ schema.preAsync('save', async function () {
   if (!this.isNew) {
     return
   }
-  let code = this.get('code')
-  if (!code) {
-    code = '000000' + Math.round(Math.random() * 999999).toString()
-    code = code.substr(code.length - 6)
-    this.set('code', code)
-  }
-  const to = this.get('to')
-  const used = this.get('used')
-  const nickname = this.get('nickname')
 
-  switch (this.get('toType')) {
+  const to: string = this.get('to')
+  const toType: string = this.get('toType')
+  const type = this.get('type')
+  const code = this.get('code')
+  const nickname: string = this.get('nickname')
+
+  switch (toType) {
     case 'email':
       await new Promise(function (resolve, reject) {
         let data = {
           to,
           from: emailConfig.from,
-          subject: `【${siteConfig.title}】 ${used} 验证码`,
-          text: `您好 ${nickname}。 \r\n您的验证码为 ${code}  \r\n它用于${used}。`,
-          html: `<p>您好 ${nickname.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}。 </p><p>您的验证码为  ${code}</p><p>它用于${used}。</p>`,
+          subject: `【${siteConfig.title}】 ${type} 验证码`,
+          text: `您好 ${nickname}。 \r\n您的验证码为 ${code}  \r\n它用于${type}。`,
+          html: `<p>您好 ${nickname.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}。 </p><p>您的验证码为  ${code}</p><p>它用于${type}。</p>`,
         }
-        email.sendMail(data, (e, info) => {
+        emailSend.sendMail(data, function (e, info) {
           if (e) {
             return reject(e)
           }
@@ -145,17 +141,21 @@ schema.preAsync('save', async function () {
       break
     case 'sms':
       await new Promise((resolve, reject) => {
-        phone.execute('alibaba.aliqin.fc.sms.num.send', {
+        phoneSend.execute('alibaba.aliqin.fc.sms.num.send', {
           extend: '',
           sms_type: 'normal',
           sms_free_sign_name: phoneConfig.sms_free_sign_name,
-          sms_param: JSON.stringify({used, nickname, code}),
+          sms_param: JSON.stringify({ type, nickname, code }),
           rec_num: to,
           sms_template_code: phoneConfig.sms_template_code,
-        }, (e, response) => {
+        }, function (e, response) {
           if (response && response.error_response) {
             if (response.error_response.code === 15) {
-              this.throw(403, '请求频率过快请稍后再试')
+              throw createError(403, 'ratelimit', {
+                path: 'verification',
+                reset: Date.now() + 60 * 1000,
+                method: 'send',
+              })
             }
           }
           if (e) {
@@ -166,7 +166,7 @@ schema.preAsync('save', async function () {
       })
       break
     default:
-      throw new Error('Verification type unknown')
+      throw createError(500, 'enum', { path: 'toType', value: toType })
   }
 })
 
@@ -174,7 +174,7 @@ schema.preAsync('save', async function () {
 
 
 schema.set('toJSON', {
-  transform(doc, ret) {
+  transform(doc: VerificationModel, ret) {
     delete ret.code
     delete ret.ip
     delete ret.to
@@ -182,8 +182,17 @@ schema.set('toJSON', {
 })
 
 
-schema.statics.findByCode = async function findByCode(options) {
-  let query = {
+schema.statics.findByCode = async function findByCode(options: {
+  token: MongoId | TokenModel,
+  type: string,
+  code: string,
+  user?: MongoId | UserModel,
+  to?: string,
+  toType?: string,
+  test?: boolean,
+}): Promise<void | VerificationModel> {
+
+  let query: Object = {
     token: options.token,
     type: options.type,
   }
@@ -192,7 +201,7 @@ schema.statics.findByCode = async function findByCode(options) {
     query.toType = options.toType
   }
 
-  let verifications = await this.find(query, null, {
+  let verifications: VerificationModel[] = await this.find(query, null, {
     limit: 3,
     sort: {
       expiredAt: -1,
@@ -201,7 +210,7 @@ schema.statics.findByCode = async function findByCode(options) {
 
   let isBreak = false
   let now = new Date
-  let verification
+  let verification: VerificationModel
   for (let i = 0; i < verifications.length; i++) {
     verification = verifications[i]
     // 已使用
@@ -220,7 +229,7 @@ schema.statics.findByCode = async function findByCode(options) {
     }
 
     // user 不对
-    if (options.user && (!verification.get('user') || !verification.get('user').equals(options.user))) {
+    if (options.user && options.user.equals && !options.user.equals(verification.get('user'))) {
       continue
     }
 
@@ -237,7 +246,7 @@ schema.statics.findByCode = async function findByCode(options) {
     // 验证值不对
     if (verification.get('code') !== options.code) {
       // 增加一次错误次
-      await verification.update({$inc: {error: 1}}).exec()
+      await verification.update({ $inc: { error: 1 } })
       continue
     }
 
@@ -245,8 +254,8 @@ schema.statics.findByCode = async function findByCode(options) {
     break
   }
 
-  if (!isBreak) {
-    return null
+  if (!isBreak || !verification) {
+    return
   }
 
   if (!options.test) {
@@ -258,8 +267,8 @@ schema.statics.findByCode = async function findByCode(options) {
 }
 
 
-export default model('Verification', schema, {
+export default (model('Verification', schema, {
   shardKey: {
     token: 1,
   },
-})
+}): Class<VerificationModel>)

@@ -1,7 +1,10 @@
 /* @flow */
-import {baidu as config} from 'config/oauth'
+import { baidu as config } from 'config/oauth'
+
+import createError from '../../createError'
 
 import Api from './api'
+
 
 config.clientId = config.clientId || config.client_id || config.appkey || config.app_key
 config.clientSecret = config.clientSecret || config.client_secret || config.appSecret || config.app_secret || config.secretKey || config.secret_key
@@ -41,7 +44,7 @@ export default class Baidu extends Api {
     if (!query.access_token) {
       let accessToken = this.getAccessToken(true)
       if (!accessToken || !accessToken.access_token) {
-        throw new Error('The "access_token" is empty')
+        throw createError(500, 'notexist', { path: 'access_token' })
       }
       query.access_token = accessToken.access_token
     }
@@ -53,7 +56,7 @@ export default class Baidu extends Api {
   * http://developer.baidu.com/wiki/index.php?title=docs/oauth/baidu_developer
   *
   **/
-  getAccessTokenByDeveloperCredentials(params: Object = {}): Promise<accessTokenType> {
+  getAccessTokenByDeveloperCredentials(params: Object = {}): Promise<AccessToken> {
     let body = {
       ...params,
       grant_type: 'developer_credentials',
