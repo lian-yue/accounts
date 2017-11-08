@@ -1,87 +1,84 @@
-import ES6Promise from 'es6-promise/auto'
-import moment from 'moment'
+/* @flow */
+import 'es6-promise/auto'
 import queryString from 'query-string'
-
 import { TOKEN, MESSAGES } from './store/types'
-
-moment.locale('zh-cn');
-
-module.exports = async function() {
+export async function init() {
   if (!window.fetch) {
-    await import("whatwg-fetch")
+    await import('whatwg-fetch')
   }
-  const {app, store, router} = require('./app')
+  const createApp = require('./app').default
+  const { store, router, locale, app } = createApp()
 
-  if (window.__INITIAL_STATE__) {
-    store.replaceState(window.__INITIAL_STATE__)
-  }
-
-  // 登录判断
-  router.beforeEach(function(to, from, next) {
-    if (to.meta.login && !store.state.token.user) {
-      next({
-        path: '/auth/login',
-        query: {message: 'not_logged', redirect_uri: to.fullPath}
-      })
-    } else {
-      next()
-    }
-  })
-
-
-  store.commit.fetch = async function (path, query, body) {
-    var opt = {}
+  store.commit.fetch = async function (method: string, path: string, query: Object | string = {}, body?: any): Object {
+    let opt = {}
     opt.headers = {}
+    opt.method = method
 
+    let uri: string = path
     try {
-      if (body && typeof body == 'object') {
+      if (!body) {
+        // empty
+      } else if (typeof body === 'object') {
         if (!store.state.token._id) {
           await store.dispatch({
             type: TOKEN,
-            create: 1,
+            save: true,
           })
         }
-        body = queryString.stringify(Object.assign({}, body, {format: 'json', csrf_token: store.state.token._id}))
-      }
-
-      if (query && typeof query == 'object') {
-        query = queryString.stringify(body ? query : Object.assign({}, query, {format : 'json'}))
-      }
-
-      if (body) {
-        opt.method = 'POST'
-        opt.headers['Content-Type'] = "application/x-www-form-urlencoded"
-      }
-
-      if (body) {
+        opt.body = queryString.stringify(Object.assign({}, body, { format: 'json', csrf_token: store.state.token.id }))
+        opt.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+      } else {
         opt.body = body
+        opt.headers['Content-Type'] = 'application/x-www-form-urlencoded'
       }
+      let queryObject: Object
+      if (!query) {
+        queryObject = {}
+      } else if (typeof query === 'object') {
+        queryObject = query
+      } else {
+        queryObject = queryString.parse(query)
+      }
+      uri += '?' + queryString.stringify(Object.assign({}, queryObject, body ? { format: 'json' } : {}))
+
       opt.credentials = opt.credentials || 'same-origin'
       opt.timeout = 10000
 
-      var response = await fetch(path + (query ? '?' + query : ''), opt).then((response) => {
-        if (response.status == 204) {
+      let response = await fetch(uri, opt).then(function (res) {
+        if (res.status === 204) {
           return {}
         }
-        return response.json(true)
+        return res.json()
       })
+
       if (response.messages) {
-        var err = new Error
-        for (var key in response) {
+        let err = new Error
+        for (let key in response) {
+          // $flow-disable-line
           err[key] = response[key]
         }
         throw err
       }
       return response
     } catch (e) {
+      e._type = e.type
       e.type = MESSAGES
       delete e.name
       throw e
     }
   }
 
+
+  //  读取 store
+  if (window.__INITIAL_STATE__) {
+    store.replaceState(window.__INITIAL_STATE__)
+  }
+
+  // Locale
+  await locale.changeLocale()
+
   router.onReady(() => {
     app.$mount('#app')
   })
 }
-module.exports()
+init()

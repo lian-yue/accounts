@@ -53,7 +53,7 @@ export default class Router {
     return middlewares
   }
 
-  async match(ctx: Context, method: string = 'GET', path: string = '/', _query: Object | string = {}, body?: any, next: () => void): Object | void {
+  async match(ctx: Context, method: string = 'GET', path: string = '/', _query: Object | string = {}, body?: any, next: () => void = () => undefined): Promise<Object | void> {
     let query = _query
     if (typeof query === 'string') {
       query = queryString.parse(query)
@@ -75,7 +75,8 @@ export default class Router {
     }
 
     if (is404) {
-      return next()
+      next()
+      return
     }
 
 

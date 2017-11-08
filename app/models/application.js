@@ -57,7 +57,7 @@ const schema: Schema<ApplicationModel> = new Schema({
     validate: [
       {
         type: 'not_id',
-        message: locale.getLanguagePackValue(['errors', 'notid']),
+        message: locale.getLanguageValue(['errors', 'notid']),
         validator(slug) {
           try {
             // eslint-disable-next-line
@@ -70,13 +70,13 @@ const schema: Schema<ApplicationModel> = new Schema({
       },
       {
         type: 'reserve',
-        message: locale.getLanguagePackValue(['errors', 'reserve']),
+        message: locale.getLanguageValue(['errors', 'reserve']),
         validator: reserve,
       },
       {
         isAsync: true,
         type: 'hasexist',
-        message: locale.getLanguagePackValue(['errors', 'hasexist']),
+        message: locale.getLanguageValue(['errors', 'hasexist']),
         async validator(slug) {
           if (this.get('deletedAt')) {
             return true
@@ -135,7 +135,7 @@ const schema: Schema<ApplicationModel> = new Schema({
               path: 'scopes',
               maximum: 32,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
           },
@@ -182,14 +182,14 @@ const schema: Schema<ApplicationModel> = new Schema({
               path: 'requestOrigins',
               maximum: 8,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
           },
         },
         {
           type: 'match',
-          message: locale.getLanguagePackValue(['errors', 'match']),
+          message: locale.getLanguageValue(['errors', 'match']),
           validator(requestOrigin) {
             let matches = requestOrigin.match(/^(\w+)\:\/+[0-9a-z]/)
             if (!matches) {
@@ -221,14 +221,14 @@ const schema: Schema<ApplicationModel> = new Schema({
               path: 'redirectUris',
               maximum: 8,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
           },
         },
         {
           type: 'match',
-          message: locale.getLanguagePackValue(['errors', 'match']),
+          message: locale.getLanguageValue(['errors', 'match']),
           validator(redirectUri) {
             let matches = redirectUri.match(/^(\w+)\:\/+[0-9a-z]/)
             if (!matches) {
@@ -260,7 +260,7 @@ const schema: Schema<ApplicationModel> = new Schema({
               return matchIP(allowedIp) || matchCidrIP(allowedIp)
             }
           },
-          message: locale.getLanguagePackValue(['errors', 'match']),
+          message: locale.getLanguageValue(['errors', 'match']),
         },
         {
           validator(allowedIp) {
@@ -273,7 +273,7 @@ const schema: Schema<ApplicationModel> = new Schema({
               path: 'allowedIps',
               maximum: 32,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
 

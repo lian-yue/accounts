@@ -11,19 +11,19 @@ MongooseError.ValidatorError.prototype.formatMessage = function (message: string
   return locale.translation(['errors', props.type || message], message, props)
 }
 
-MongooseError.messages.general.default = locale.getLanguagePackValue(['errors', 'default'])
-MongooseError.messages.general.required = locale.getLanguagePackValue(['errors', 'required'])
+MongooseError.messages.general.default = locale.getLanguageValue(['errors', 'default'])
+MongooseError.messages.general.required = locale.getLanguageValue(['errors', 'required'])
 
-MongooseError.messages.Number.min = locale.getLanguagePackValue(['errors', 'min'])
-MongooseError.messages.Number.max = locale.getLanguagePackValue(['errors', 'max'])
+MongooseError.messages.Number.min = locale.getLanguageValue(['errors', 'min'])
+MongooseError.messages.Number.max = locale.getLanguageValue(['errors', 'max'])
 
-MongooseError.messages.Date.min = locale.getLanguagePackValue(['errors', 'min'])
-MongooseError.messages.Date.max = locale.getLanguagePackValue(['errors', 'max'])
+MongooseError.messages.Date.min = locale.getLanguageValue(['errors', 'min'])
+MongooseError.messages.Date.max = locale.getLanguageValue(['errors', 'max'])
 
-MongooseError.messages.String.enum = locale.getLanguagePackValue(['errors', 'enum'])
-MongooseError.messages.String.match = locale.getLanguagePackValue(['errors', 'match'])
-MongooseError.messages.String.minlength = locale.getLanguagePackValue(['errors', 'minlength'])
-MongooseError.messages.String.maxlength = locale.getLanguagePackValue(['errors', 'maxlength'])
+MongooseError.messages.String.enum = locale.getLanguageValue(['errors', 'enum'])
+MongooseError.messages.String.match = locale.getLanguageValue(['errors', 'match'])
+MongooseError.messages.String.minlength = locale.getLanguageValue(['errors', 'minlength'])
+MongooseError.messages.String.maxlength = locale.getLanguageValue(['errors', 'maxlength'])
 
 
 
@@ -82,7 +82,7 @@ Document.prototype.can = async function can(options: string | string[] | {[key: 
       if (arguments.length > 1) {
         argsArray.push(arguments[1])
       }
-      await this.cans[fn].apply(this, argsArray)
+      await this[fn].apply(this, argsArray)
       return
     }
 
@@ -97,7 +97,7 @@ Document.prototype.can = async function can(options: string | string[] | {[key: 
         if (typeof this[fn] !== 'function') {
           throw createError(500, 'notexist', { path: 'method', value: fn })
         }
-        await this.cans[fn].apply(this, argsArray)
+        await this[fn].apply(this, argsArray)
       }
       return
     }
@@ -112,7 +112,7 @@ Document.prototype.can = async function can(options: string | string[] | {[key: 
       } else if (arguments.length > 1) {
         argsArray.push(arguments[1])
       }
-      await this.cans[fn].apply(this, argsArray)
+      await this[fn].apply(this, argsArray)
     }
   } catch (e) {
     e.can = true

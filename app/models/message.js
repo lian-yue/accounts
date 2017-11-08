@@ -55,7 +55,7 @@ const schema: Schema<MessageModel> = new Schema({
             path: 'message',
             maxlength: '16KB',
             type: 'maxlength',
-            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+            message: locale.getLanguageValue(['errors', 'maxlength']),
           }))
         },
       },

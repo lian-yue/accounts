@@ -10,7 +10,7 @@ import type { Context } from 'koa'
 export default async function (ctx: Context) {
   let params = {
     ...ctx.request.query,
-    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
+    ...(ctx.request.body && typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
   let token: Token = ctx.state.token
   let application: Application = ctx.state.application

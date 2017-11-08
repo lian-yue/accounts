@@ -1,21 +1,306 @@
 const path              = require('path')
 const webpack           = require('webpack')
-const merge             = require('webpack-merge')
+const webpackMerge         = require('webpack-merge')
 const ExtractTextPlugin = require('extract-text-webpack-plugin')
 const precss            = require('precss')
 const autoprefixer      = require('autoprefixer')
 
 const packageInfo       = require('./package')
 const site              = require('./config/site')
-
+const vueLoader         = require('./vueLoader')
 // process.traceDeprecation = true
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'production'
 
 const isDev = process.env.NODE_ENV === 'development'
 
+function config(opts = {}) {
+  const names = Object.keys(opts.entry)
+  const publicPath = site.assets + names[0] + '/'
+
+  const extractCSS = new ExtractTextPlugin({
+    filename: '[name].css',
+    disable: isDev,
+  })
+
+  opts.entry.index = opts.entry[names[0]]
+  delete opts.entry[names[0]]
 
 
+  opts.plugins = opts.plugins || []
+  if (isDev) {
+    opts.entry.index.unshift('webpack-hot-middleware/client?name=' + names[0])
+    opts.plugins.push(
+      new webpack.HotModuleReplacementPlugin()
+    )
+  } else {
+    opts.plugins.push(
+      new webpack.optimize.UglifyJsPlugin({
+        compress: {
+          warnings: false,
+        },
+        comments: false,
+        mangle: true,
+        minimize: true,
+        sourceMap: true,
+      })
+    )
+  }
+
+  return webpackMerge({
+    output: {
+      path: path.join(__dirname, 'public/assets/' + names[0] + '/'),
+      publicPath,
+      filename: '[name].js',
+      chunkFilename: '[chunkhash:8].[name].chunk.js',
+    },
+
+    resolve: {
+      modules: [
+        path.join(__dirname, 'node_modules'),
+        path.join(__dirname, isDev ? 'dev' : 'dist'),
+      ],
+
+      alias: {
+        package: path.join(__dirname, 'package.json'),
+        config: path.join(__dirname, 'config'),
+        models: path.join(__dirname, 'app/models'),
+        viewModels: path.join(__dirname, 'app/viewModels'),
+        views: path.join(__dirname, 'app/views'),
+      },
+
+      extensions: [
+        isDev ? '.dev.vue' : '.prod.vue',
+        isDev ? '.dev.js' : '.prod.js',
+        '.vue',
+        '.js',
+        '.json',
+        '.css',
+        '.less',
+        '.sass',
+        '.scss',
+        '.styl',
+      ],
+    },
+
+    module: {
+      rules: [
+        {
+          test: /\.jsx?$/,
+          use: [
+            {
+              loader: 'babel-loader',
+              options: {
+                cacheDirectory: isDev
+              }
+            },
+            {
+              loader: 'eslint-loader',
+            }
+          ],
+        },
+        vueLoader,
+        {
+          test: /\.(scss|sass)$/,
+          use: extractCSS.extract({
+            fallback: 'style-loader',
+            use: [
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                  sourceMap: true,
+                },
+              },
+              {
+                loader: 'postcss-loader',
+                options: {
+                  sourceMap: true,
+                  plugins() {
+                    return [
+                      precss,
+                      autoprefixer
+                    ]
+                  }
+                }
+              },
+              {
+                loader: 'sass-loader',
+                options: {
+                  sourceMap: true,
+                  includePaths: [
+                    path.join(__dirname, 'node_modules'),
+                  ],
+                }
+              }
+            ],
+          })
+        },
+        {
+          test: /\.styl$/,
+          use: extractCSS.extract({
+            fallback: 'style-loader',
+            use: [
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                  sourceMap: true,
+                },
+              },
+              {
+                loader: 'postcss-loader',
+                options: {
+                  sourceMap: true,
+                  plugins() {
+                    return [
+                      precss,
+                      autoprefixer
+                    ]
+                  }
+                }
+              },
+              {
+                loader: 'stylus-loader',
+                options: {
+                  sourceMap: true,
+                }
+              }
+            ],
+          })
+        },
+        {
+          test: /\.less$/,
+          use: extractCSS.extract({
+            fallback: 'style-loader',
+            use: [
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                  sourceMap: true,
+                },
+              },
+              {
+                loader: 'postcss-loader',
+                options: {
+                  sourceMap: true,
+                  plugins() {
+                    return [
+                      precss,
+                      autoprefixer
+                    ]
+                  }
+                }
+              },
+              {
+                loader: 'less-loader',
+                options: {
+                  sourceMap: true,
+                }
+              }
+            ],
+          })
+        },
+        {
+          test: /\.css$/,
+          use: extractCSS.extract({
+            fallback: 'style-loader',
+            use: [
+              {
+                loader: 'css-loader',
+                options: {
+                  minimize: !isDev,
+                  sourceMap: true,
+                },
+              },
+              {
+                loader: 'postcss-loader',
+                options: {
+                  plugins() {
+                    return [
+                      precss,
+                      autoprefixer
+                    ]
+                  }
+                }
+              }
+            ],
+          })
+        },
+        {
+          test: /\.(gif|jpe?g|png|webp|svg)(\?.*)?$/,
+          use: [
+            {
+              loader: 'url-loader',
+              options: {
+                limit: 4096,
+                name: 'images/[name].[ext]?[hash:8]',
+                publicPath,
+                useRelativePath: !isDev,
+              }
+            }
+          ]
+        },
+        {
+          test: /\.(woff2?|eot|ttf|otf)(\?.*)?$/,
+          use: [
+            {
+              loader: 'url-loader',
+              options: {
+                limit: 4096,
+                name: 'fonts/[name].[ext]?[hash:8]',
+                publicPath,
+                useRelativePath: !isDev,
+              }
+            }
+          ]
+        },
+      ]
+    },
+
+    plugins: [
+      new webpack.BannerPlugin(`Name: ${packageInfo.name}\nVersion: ${packageInfo.version}\nAuthor: ${packageInfo.author}Description: ${packageInfo.description}`),
+      new webpack.DefinePlugin({
+        'process.env': {
+          NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+          VUE_ENV: JSON.stringify('client'),
+          version: JSON.stringify(packageInfo.version),
+        },
+        NODE_ENV: JSON.stringify(process.env.NODE_ENV),
+        __ENV__: JSON.stringify(process.env.NODE_ENV),
+        __SERVER__: false,
+      }),
+      new webpack.NoEmitOnErrorsPlugin(),
+      new webpack.NamedModulesPlugin(),
+    ],
+    devtool: isDev ? 'eval-source-map' : 'source-map'
+  }, opts)
+}
+
+
+const ie = config({
+  entry: {
+    ie: [
+      path.resolve(__dirname, 'app/views/ie/client'),
+    ],
+  },
+})
+
+const vue = config({
+  entry: {
+    vue: [
+      path.resolve(__dirname, 'app/views/vue/client'),
+    ],
+  },
+})
+
+module.exports = [
+  ie,
+  vue,
+]
+
+/*
 function base(opts = {}) {
   const publicPath = site.assets + opts.name + '/'
 
@@ -440,3 +725,4 @@ module.exports = [
   ie,
   vue,
 ]
+*/

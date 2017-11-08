@@ -1,78 +1,62 @@
-import { app, router, store } from './app'
-import {PROTOCOL, TOKEN, HEADERS, MESSAGES} from './store/types'
+/* @flow */
+import createError from 'models/createError'
+
+import createApp from './app'
+import { PROTOCOL, TOKEN, MESSAGES } from './store/types'
+
+import type { Context } from 'koa'
 
 
-export default async function(context) {
-  var ctx = context.ctx
-  router.push(ctx.url)
-
-  store.commit({
-    type: PROTOCOL,
-    protocol: ctx.protocol
-  })
-
-  //  写入 token
-  var token = await ctx.viewModel('GET', '/auth/token', {create: ''})
-  store.commit({
-    type: TOKEN,
-    token: token
-  })
-
-  // 登录判断
-  router.beforeEach(function(to, from, next) {
-    if (to.meta.login && !store.state.token.user) {
-      next({
-        path: '/auth/login',
-        query: {message: 'not_logged', redirect_uri: to.fullPath}
-      })
-    } else {
-      next()
-    }
-  })
+export default async function (context: Object) {
+  const { store, router, locale, app } = createApp()
+  const ctx: Context = context.context
 
 
-  store.commit.fetch = async function (path, query, body) {
-    query = query || {}
-    if (typeof query != 'object') {
-      query = queryString.parse(query)
-    }
+  store.commit.fetch = async function (method: string, path: string, query: Object | string = {}, body?: any): Object {
     try {
-      return await ctx.viewModel(body ? 'POST' : 'GET', path, query, body).then(state => toJSONObject(state))
-    } catch (err) {
+      return await ctx.viewModel(method, path, query, body).then(state => toJSONObject(state))
+    } catch (e) {
+      let err = createError(e)
       ctx.app.emit('error', err, ctx)
+      // $flow-disable-line
+      err._type = err.type
+      // $flow-disable-line
       err.type = MESSAGES
       delete err.name
       throw err
     }
   }
 
+  // 链接
+  router.push(ctx.url)
 
-  await new Promise((resolve, reject) => {
-    router.onReady(() => {
+  // 协议
+  store.commit({
+    type: PROTOCOL,
+    protocol: ctx.protocol
+  })
+
+  // token
+  await store.dispatch({
+    type: TOKEN,
+  })
+
+  // Locale
+  await locale.changeLocale()
+
+  await new Promise(function (resolve, reject) {
+    router.onReady(function () {
       const matchedComponents = router.getMatchedComponents()
       if (!matchedComponents.length) {
-        var e = new Error('Router not match');
-        e.status = 404
-        reject(e)
-        return
+        return reject(createError(404, 'notexist', { path: 'router' }))
       }
 
-      Promise.all(matchedComponents.map(component => {
+      Promise.all(matchedComponents.map(function (component) {
         if (!component.fetch) {
           return
         }
         return component.fetch(store)
-      })).then(() => {
-        matchedComponents.map(component => {
-          if (!component.headers) {
-            return
-          }
-          var headers = component.headers(store)
-          if (headers) {
-            headers.type = HEADERS
-            store.commit(headers)
-          }
-        })
+      })).then(function () {
         resolve(app)
       }).catch(reject)
     })
@@ -81,72 +65,29 @@ export default async function(context) {
 
   context.state = store.state
 
-  var headers = store.state.headers
+  context.htmlAttrs = context.htmlAttrs || ''
+  context.title = context.title || ''
 
-  if (headers.status) {
-    ctx.status = headers.status
-  }
-
-  var head = []
-  head.push('<title>'+ (headers.title ? htmlencode(headers.title.join(' - ')) : '') +'</title>')
-  if (headers.meta) {
-    headers.meta.forEach(function(attrs) {
-      head.push('<meta '+ attrsToString(attrs) +' data-header />')
-    })
-  }
-  if (headers.link) {
-    headers.link.forEach(function(attrs) {
-      head.push('<link '+ attrsToString(attrs) +' data-header />')
-    })
-  }
-  context.head = head.join('\n')
   return app
 }
 
 
 
-
-
-
-
-
-function attrsToString(attrs) {
-  var res = []
-  for (var key in attrs) {
-    if (attrs[key] === false || attrs[key] === null || attrs[key] === undefined) {
+function toJSONObject(state: Object): Object {
+  for (let key in state) {
+    let value = state[key]
+    if (!value) {
       continue
     }
-    res.push(htmlencode(key) +'="'+ htmlencode(String(attrs[key])) +'"')
-  }
-  return res.join(' ')
-}
-
-
-function htmlencode(str) {
-  return str.replace(/&/g,"&amp;")
-    .replace(/</g,"&lt;")
-    .replace(/>/g,"&gt;")
-    .replace(/\'/g,"&#39;")
-    .replace(/\"/g,"&quot;")
-}
-
-
-
-
-
-function toJSONObject(state) {
-  for (var key in state) {
-    if (!state[key]) {
+    if (typeof value !== 'object') {
       continue
     }
-    if (typeof state[key] != 'object') {
-      continue
-    }
-    if (typeof state[key].toJSON == 'function') {
-      state[key] = state[key].toJSON()
+    if (typeof value.toJSON === 'function') {
+      value = value.toJSON()
     } else {
-      state[key] = toJSONObject(state[key])
+      value = toJSONObject({ ...value })
     }
+    state[key] = value
   }
   return state
 }

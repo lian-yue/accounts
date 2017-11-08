@@ -45,8 +45,25 @@ declare module 'config/site' {
   declare module.exports: {[key: string]: string}
 }
 
+declare module 'config/phone' {
+  declare module.exports: {
+    [key: string]: string,
+    sms: {
+      [key: string]: string,
+    }
+  }
+}
+
 declare module 'config/locale' {
   declare module.exports: {
-    [key: string]: any,
+    nameList: {
+      [string]: string[],
+    },
+    languageList: {
+      [string]: boolean,
+    },
+    timezoneList: {
+      [string]: number[],
+    }
   }
 }

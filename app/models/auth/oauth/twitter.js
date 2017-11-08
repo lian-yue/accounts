@@ -65,7 +65,7 @@ export default class Twitter extends Api {
 
 
   response(response: Object): Object {
-    let body = response.body
+    let body = response.data
     if (body.substr(0, 1) === '\u007B' || body.substr(0, 1) === '\u005B') {
       body = JSON.parse(body)
     } else if (body.substr(0, 1) === '<') {

@@ -1,5 +1,5 @@
 /* @flow */
-import config from 'config/locale'
+import { languageList, nameList, timezoneList } from 'config/locale'
 
 type Token = {
   type: string,
@@ -29,26 +29,21 @@ export default class Locale {
     "'": /[\\\\']/,
   }
 
+  name: string = 'en'
+
   language: string = 'en'
 
   languagesPack: {[string]: LanguagePack} = {}
 
-  startOfWeek: number = 1
+  timezone: string = 'UTC'
 
-  timeZone: string = 'UTC'
+  timezoneInfo: number[] = [0, 1]
 
-  static timeZoneList: {[string]: number[]} = {
-    UTC: [0],
-    'Asia/Shanghai': [480],
-    'Asia/Hong_Kong': [480],
-    'Asia/Macau': [480],
+  nameList: {[string]: string[]} = nameList
 
-    'Asia/Tokyo': [540],
-  }
+  languageList: {[string]: boolean} = languageList
 
-  static getLanguageList(): Object {
-    return config
-  }
+  timezoneList: {[string]: number[]} = timezoneList
 
   constructor(language?: string, languagePack?: LanguagePack): void {
     if (language) {
@@ -59,15 +54,49 @@ export default class Locale {
     }
   }
 
+  formatName(value: string): string {
+    let arr = value.trim().split(/[_-]/)
+    arr[0] = arr[0].toLowerCase()
+    if (arr[2]) {
+      arr[2] = arr[2].toUpperCase()
+      if (arr[1]) {
+        arr[1] = arr[1].charAt(0).toUpperCase() + arr[1].substr(1)
+      }
+    } else if (arr[1] && arr[1].length > 2) {
+      arr[1] = arr[1].charAt(0).toUpperCase() + arr[1].substr(1)
+    } else if (arr[1]) {
+      arr[1] = arr[1].toUpperCase()
+    }
+    return arr.join('-')
+  }
+
+
+  getName(): string {
+    return this.name
+  }
+
+  setName(name: string): boolean {
+    let name2 = this.formatName(name)
+    let data = this.nameList[name2]
+    if (!data) {
+      return false
+    }
+    this.name = name2
+    this.setLanguage(data[0])
+    this.setTimezone(data[1])
+    return true
+  }
+
   getLanguage(): string {
     return this.language
   }
 
   setLanguage(language: string): boolean {
-    if (!this.constructor.getLanguageList()[language]) {
+    let name = this.formatName(language)
+    if (!this.languageList[name]) {
       return false
     }
-    this.language = language
+    this.language = name
     return true
   }
 
@@ -98,7 +127,7 @@ export default class Locale {
     return value
   }
 
-  getLanguagePackValue(path: string | string[]): string {
+  getLanguageValue(path: string | string[]): string {
     let names: string[]
     if (typeof path === 'string') {
       names = path.split('.')
@@ -132,14 +161,28 @@ export default class Locale {
   }
 
 
-  setStartOfWeek(startOfWeek: number): boolean {
-    this.startOfWeek = startOfWeek % 7
+  setTimezone(timezone: string): boolean {
+    let name = this.formatName(timezone)
+    let timezoneInfo = this.timezoneList[name]
+    if (!timezoneInfo) {
+      return false
+    }
+    this.timezoneInfo = timezoneInfo
+    this.timezone = name
     return true
   }
 
-  getStartOfWeek(): number {
-    return this.startOfWeek
+  getTimezone(): string {
+    return this.timezone
   }
+
+  getTimezoneInfo(timezone: string = this.timezone): void | number[] {
+    if (timezone === this.timezone) {
+      return this.timezoneInfo
+    }
+    return this.timezoneList[timezone]
+  }
+
 
   tokenSearch(state: State, search: RegExp): boolean {
     let index: number = 0
@@ -347,13 +390,9 @@ export default class Locale {
     return (length < 600 ? '0' : '') + Math.floor(length / 60) + ':' + length
   }
 
-  formatDate(arg: any, format: string = 'w3c', timeZone: string = this.timeZone): string {
+  formatDate(arg: any, format: string = 'w3c', timezone?: string): string {
     let date: Date
-    if (arg && arg instanceof Date) {
-      date = arg
-    } else {
-      date = new Date(arg)
-    }
+    date = new Date(arg)
     if (isNaN(date)) {
       return 'NaN'
     }
@@ -406,13 +445,13 @@ export default class Locale {
       case 'iso':
         return date.toISOString()
       default: {
-        let timeZoneInfo = this.constructor.timeZoneList[timeZone]
+        let timezoneInfo = this.getTimezoneInfo(timezone) || this.timezoneInfo
         let languagePack: Object = this.getLanguagePack(['date']) || {}
 
 
         // 强制设置时区
-        if (timeZoneInfo[0]) {
-          date.setTime(date.getTime() + timeZoneInfo[0] * 60 * 1000)
+        if (timezoneInfo[0]) {
+          date.setTime(date.getTime() + timezoneInfo[0] * 60 * 1000)
         }
 
         let YYYY = date.getUTCFullYear()
@@ -444,7 +483,7 @@ export default class Locale {
         let ss = String(s < 10 ? '0' + s : s)
 
 
-        let zoneOffset = timeZoneInfo[0]
+        let zoneOffset = timezoneInfo[0]
         let zoneHours = Math.floor(zoneOffset / 60)
         if (zoneOffset >= 0) {
           zoneHours = '+' + String(zoneHours)
@@ -465,7 +504,12 @@ export default class Locale {
         let ZZ = zoneHours + ':' + zoneMinutes
 
 
-        let a = languagePack.meridiem[h < 12 ? 0 : 1]
+        let a: string = ''
+        for (let i in languagePack.meridiem) {
+          if (h < Number(i)) {
+            a = languagePack.meridiem[i]
+          }
+        }
         let A = a.toUpperCase()
 
         let props = {
@@ -526,7 +570,7 @@ export default class Locale {
 
             // 这周
             day.setUTCDate(day.getUTCDate() - 2)
-            day.setUTCDate(day.getDate() - day.getDay() + this.startOfWeek + 7)
+            day.setUTCDate(day.getDate() - day.getDay() + timezoneInfo[1] + 7)
             if (day.getTime() > date.getTime()) {
               return this.format(languagePack.formats.sameWeek, props)
             }
@@ -545,7 +589,7 @@ export default class Locale {
 
             // 这周
             day.setUTCDate(day.getUTCDate() + 1)
-            day.setUTCDate(day.getUTCDate() - day.getUTCDay() + this.startOfWeek)
+            day.setUTCDate(day.getUTCDate() - day.getUTCDay() + timezoneInfo[1])
             if (date.getTime() >= day.getTime()) {
               return this.format(languagePack.formats.sameWeek, props)
             }
@@ -566,7 +610,7 @@ export default class Locale {
 
   // 翻译
   translation(path: string | string[], defaultValue?: Object | string = {}, props?: Object = {}): string {
-    let value = this.getLanguagePackValue(path)
+    let value = this.getLanguageValue(path)
     if (!value && typeof defaultValue === 'string') {
       value = defaultValue
     }

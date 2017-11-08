@@ -42,7 +42,7 @@ const schema: Schema<TokenModel> = new Schema({
               path: 'scopes',
               maximum: 32,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
           },
@@ -78,6 +78,26 @@ const schema: Schema<TokenModel> = new Schema({
     type: Schema.Types.ObjectId,
     index: true,
     ref: 'User',
+  },
+
+
+  locale: {
+    type: String,
+    default: 'en',
+    trim: true,
+    set(value) {
+      return locale.formatName(value)
+    },
+
+    validate: [
+      {
+        type: 'match',
+        validator(value) {
+          return !!locale.nameList[value]
+        },
+        message: locale.getLanguageValue(['errors', 'match']),
+      },
+    ]
   },
 
   authorize: {
@@ -143,7 +163,7 @@ const schema: Schema<TokenModel> = new Schema({
         validate: [
           {
             type: 'match',
-            message: locale.getLanguagePackValue(['errors', 'match']),
+            message: locale.getLanguageValue(['errors', 'match']),
             validator(value) {
               return !!matchIP(value)
             },
@@ -318,6 +338,77 @@ schema.methods.canApplication = async function canApplication(token?: TokenModel
     if (!application.equals(value)) {
       throw createError(400, 'incorrect', { path: 'application', value: application.get('id') })
     }
+  }
+}
+
+
+
+
+schema.methods.canList = async function canList(token?: TokenModel, { deletedAt = false }: { deletedAt: boolean } = {}) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  await token.canUser(token, { value: true })
+  let user: UserModel = token.get('user')
+  let admin: boolean = !user.equals(this.get('user')) || this.get('deletedAt') || deletedAt
+
+  await token.canScope(token, { path: 'token/list', admin })
+  await token.canUser(token, { value: true, admin })
+}
+
+
+schema.methods.canRead = async function canRead(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  if (!token.equals(this)) {
+    await token.canUser(token, { value: true })
+
+    let user: UserModel = token.get('user')
+    let admin: boolean = !user.equals(this.get('user')) || this.get('deletedAt')
+    await token.canScope(token, { path: 'token/read', admin })
+    await token.canUser(token, { value: true, admin })
+  }
+}
+
+schema.methods.canSave = async function canSave(token?: TokenModel) {
+  if (this.isNew) {
+    return
+  }
+
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+
+  if (!token.equals(this)) {
+    await token.canUser(token, { value: true })
+    let user: UserModel = token.get('user')
+    let admin: boolean = !user.equals(this.get('user'))
+    await token.canScope(token, { path: 'token/save', admin })
+    await token.canUser(token, { value: true, black: true, admin })
+  }
+  await this.canNotDelete(token)
+}
+
+schema.methods.canDelete = async function canDelete(token?: TokenModel) {
+  if (!token) {
+    throw createError(400, 'required', { path: 'token' })
+  }
+  if (!token.equals(this)) {
+    await token.canUser(token, { value: true })
+    let user: UserModel = token.get('user')
+    let admin: boolean = !user.equals(this.get('user'))
+    await token.canScope(token, { path: 'token/delete', admin })
+    await token.canUser(token, { value: true, black: true, admin })
+  }
+  await this.canNotDelete(token)
+}
+
+
+
+schema.methods.canNotDelete = async function canNotDelete(token?: TokenModel) {
+  if (this.get('deletedAt')) {
+    throw createError(404, 'notexist', { path: 'token' })
   }
 }
 

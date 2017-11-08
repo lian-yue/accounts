@@ -5,6 +5,7 @@
 </div>
 </template>
 <script>
+/* @flow */
 export default {
   props: {
     size: {

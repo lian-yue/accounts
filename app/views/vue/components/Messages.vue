@@ -28,6 +28,7 @@
       margin-bottom: 0
 </style>
 <script>
+/* @flow */
 import { MESSAGES_CLOSE } from '../store/types'
 export default {
   props: {
@@ -44,7 +45,7 @@ export default {
       return this.data.messages || []
     },
     canClose() {
-      return this.data.canClose === void 0 ? true : this.data.canClose
+      return this.data.canClose === undefined ? true : this.data.canClose
     },
     type() {
       return this.data.type || 'danger'
@@ -56,7 +57,7 @@ export default {
   methods: {
     onClose(e) {
       e && e.preventDefault()
-      this.$store.commit({type: MESSAGES_CLOSE, name: this.name})
+      this.$store.commit({ type: MESSAGES_CLOSE, name: this.name })
     }
   },
   beforeDestroy() {

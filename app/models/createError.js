@@ -51,13 +51,13 @@ export default function createError(error: mixed, message?: string, props?: Obje
   delete result.statusCode
 
   if (!result.properties) {
-    if (locale.getLanguagePackValue(['errors', result.message])) {
+    if (locale.getLanguageValue(['errors', result.message])) {
       // $flow-disable-line
       result.type = result.message
     }
 
     if (typeof result.type === 'string') {
-      let value = locale.getLanguagePackValue(['errors', result.type])
+      let value = locale.getLanguageValue(['errors', result.type])
       if (value) {
         result.message = value
       }

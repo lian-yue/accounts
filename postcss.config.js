@@ -1,5 +1,5 @@
-const precss               = require('precss')
-const autoprefixer         = require('autoprefixer')
+const precss = require('precss')
+const autoprefixer = require('autoprefixer')
 module.exports = {
   loader: 'postcss-loader',
   plugins() {

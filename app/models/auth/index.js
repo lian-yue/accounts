@@ -40,7 +40,7 @@ const schema: Schema<AuthModel> = new Schema({
           if (value) {
             return true
           }
-          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'required']), value, 'required')
+          this.invalidate(this.get('column'), locale.getLanguageValue(['errors', 'required']), value, 'required')
         },
       },
       {
@@ -68,7 +68,7 @@ const schema: Schema<AuthModel> = new Schema({
             default:
               return true
           }
-          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'match']), value, 'match')
+          this.invalidate(this.get('column'), locale.getLanguageValue(['errors', 'match']), value, 'match')
         },
       },
       {
@@ -91,7 +91,7 @@ const schema: Schema<AuthModel> = new Schema({
             return true
           }
 
-          this.invalidate(this.get('column'), locale.getLanguagePackValue(['errors', 'hasexist']), value, 'hasexist')
+          this.invalidate(this.get('column'), locale.getLanguageValue(['errors', 'hasexist']), value, 'hasexist')
         },
       },
       {
@@ -115,7 +115,7 @@ const schema: Schema<AuthModel> = new Schema({
             path: this.get('column'),
             maximum: 3,
             type: 'maximum',
-            message: locale.getLanguagePackValue(['errors', 'maximum']),
+            message: locale.getLanguageValue(['errors', 'maximum']),
             value: results.length,
           }))
         },

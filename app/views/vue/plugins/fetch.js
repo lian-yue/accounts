@@ -1,10 +1,11 @@
+/* @flow */
+import type VueType from 'vue'
 const mixin = {
   watch: {
     $route() {
       this.$fetch()
     }
   },
-
   mounted() {
     this.$fetch()
   },
@@ -14,29 +15,27 @@ const mixin = {
   },
 }
 
-function fetch() {
-  if (__SERVER__) {
-    return
-  }
-  if (!this.$options.fetch) {
-    return
-  }
-  if (!this.$options.fetchName) {
-    return
-  }
-  if (this.$route.fullPath.split('#')[0] == this.$store.state[this.$options.fetchName].fullPath) {
-    return
-  }
-  this.$options.fetch(this.$store)
-}
-
 
 export default {
-  install(Vue, options) {
-    if (Vue.prototype.$fetch) {
+  installed: false,
+  install(Vue: Class<VueType>) {
+    if (this.installed) {
       return
     }
-    Vue.prototype.$fetch = fetch
+    this.installed = true
+    Vue.prototype.$fetch = function () {
+      if (__SERVER__) {
+        return
+      }
+      let options = this.$options
+      if (!options || !options.fetch) {
+        return
+      }
+      if (options.fetchName && this.$route.fullPath.split('#')[0] === this.$store.state[options.fetchName].fullPath) {
+        return
+      }
+      options.fetch(this.$store)
+    }
     Vue.mixin(mixin)
   }
 }

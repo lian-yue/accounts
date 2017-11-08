@@ -30,14 +30,14 @@ const schema: Schema<UserModel> = new Schema({
     validate: [
       {
         type: 'notphone',
-        message: locale.getLanguagePackValue(['errors', 'notphone']),
+        message: locale.getLanguageValue(['errors', 'notphone']),
         validator(username) {
           return !matchMobilePhone(username)
         },
       },
       {
         type: 'notid',
-        message: locale.getLanguagePackValue(['errors', 'notid']),
+        message: locale.getLanguageValue(['errors', 'notid']),
         validator(username) {
           try {
             // eslint-disable-next-line
@@ -50,7 +50,7 @@ const schema: Schema<UserModel> = new Schema({
       },
       {
         type: 'reserve',
-        message: locale.getLanguagePackValue(['errors', 'reserve']),
+        message: locale.getLanguageValue(['errors', 'reserve']),
         validator: reserve,
       },
       {
@@ -75,14 +75,14 @@ const schema: Schema<UserModel> = new Schema({
             rate: '1 month',
             type: 'ratelimit',
             method: 'modify',
-            message: locale.getLanguagePackValue(['errors', 'ratelimit']),
+            message: locale.getLanguageValue(['errors', 'ratelimit']),
           }))
         },
       },
       {
         isAsync: true,
         type: 'hasexist',
-        message: locale.getLanguagePackValue(['errors', 'hasexist']),
+        message: locale.getLanguageValue(['errors', 'hasexist']),
         async validator(value) {
           let auth = await Auth.findOne({
             column: 'username',
@@ -109,7 +109,7 @@ const schema: Schema<UserModel> = new Schema({
         }
         return false
       },
-      locale.getLanguagePackValue(['errors', 'required']),
+      locale.getLanguageValue(['errors', 'required']),
     ],
 
     validate: [
@@ -125,7 +125,7 @@ const schema: Schema<UserModel> = new Schema({
             path: 'password',
             minlength: 6,
             type: 'minlength',
-            message: locale.getLanguagePackValue(['errors', 'minlength']),
+            message: locale.getLanguageValue(['errors', 'minlength']),
           }))
         },
       },
@@ -142,7 +142,7 @@ const schema: Schema<UserModel> = new Schema({
             path: 'password',
             maxlength: 64,
             type: 'maxlength',
-            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+            message: locale.getLanguageValue(['errors', 'maxlength']),
           }))
         },
       },
@@ -156,7 +156,7 @@ const schema: Schema<UserModel> = new Schema({
           if (this._oldPassword === undefined || this._oldPassword || !this._password) {
             return true
           }
-          this.invalidate('oldPassword', locale.getLanguagePackValue(['errors', 'required']), undefined, 'required')
+          this.invalidate('oldPassword', locale.getLanguageValue(['errors', 'required']), undefined, 'required')
         },
       },
       {
@@ -167,7 +167,7 @@ const schema: Schema<UserModel> = new Schema({
           if (this._newPassword === undefined || this._newPassword) {
             return true
           }
-          this.invalidate('newPassword', locale.getLanguagePackValue(['errors', 'required']), undefined, 'required')
+          this.invalidate('newPassword', locale.getLanguageValue(['errors', 'required']), undefined, 'required')
         },
       },
 
@@ -187,7 +187,7 @@ const schema: Schema<UserModel> = new Schema({
             path: 'newPassword',
             minlength: 6,
             type: 'minlength',
-            message: locale.getLanguagePackValue(['errors', 'minlength']),
+            message: locale.getLanguageValue(['errors', 'minlength']),
           }))
         },
       },
@@ -209,7 +209,7 @@ const schema: Schema<UserModel> = new Schema({
             path: 'newPassword',
             maxlength: 64,
             type: 'maxlength',
-            message: locale.getLanguagePackValue(['errors', 'maxlength']),
+            message: locale.getLanguageValue(['errors', 'maxlength']),
           }))
         },
       },
@@ -219,7 +219,7 @@ const schema: Schema<UserModel> = new Schema({
           if (value === undefined || this._newPassword === value) {
             return true
           }
-          this.invalidate('newPasswordAgain', locale.getLanguagePackValue(['errors', 'notsame']), undefined, 'notsame')
+          this.invalidate('newPasswordAgain', locale.getLanguageValue(['errors', 'notsame']), undefined, 'notsame')
         },
       },
       {
@@ -228,7 +228,7 @@ const schema: Schema<UserModel> = new Schema({
           if (value === undefined || password === value) {
             return true
           }
-          this.invalidate('passwordAgain', locale.getLanguagePackValue(['errors', 'notsame']), undefined, 'notsame')
+          this.invalidate('passwordAgain', locale.getLanguageValue(['errors', 'notsame']), undefined, 'notsame')
         },
       },
       {
@@ -244,7 +244,7 @@ const schema: Schema<UserModel> = new Schema({
           if (await this.comparePassword(value)) {
             return true
           }
-          this.invalidate('oldPassword', locale.getLanguagePackValue(['errors', 'incorrect']), undefined, 'incorrect')
+          this.invalidate('oldPassword', locale.getLanguageValue(['errors', 'incorrect']), undefined, 'incorrect')
         },
       },
     ],
@@ -255,26 +255,16 @@ const schema: Schema<UserModel> = new Schema({
     default: 'en',
     trim: true,
     set(value) {
-      let result = String(value).trim().split(/[_-]/)
-      result[0] = result[0].toLowerCase()
-      if (result[2]) {
-        result[2] = result[2].toUpperCase()
-        if (result[1]) {
-          result[1] = result[1].charAt(0).toUpperCase() + result[1].substr(1)
-        }
-      } else {
-        result[1] = result[1].toUpperCase()
-      }
-      return result.join('-')
+      return locale.formatName(value)
     },
 
     validate: [
       {
         type: 'match',
         validator(value) {
-          return !!locale.constructor.getLanguageList()[value]
+          return !!locale.nameList[value]
         },
-        message: locale.getLanguagePackValue(['errors', 'match']),
+        message: locale.getLanguageValue(['errors', 'match']),
       },
     ]
   },
@@ -319,7 +309,7 @@ const schema: Schema<UserModel> = new Schema({
       function () {
         return this.isModified('black')
       },
-      locale.getLanguagePackValue(['errors', 'required']),
+      locale.getLanguageValue(['errors', 'required']),
     ],
   },
 

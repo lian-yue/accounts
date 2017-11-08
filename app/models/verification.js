@@ -1,6 +1,10 @@
 /* @flow */
+import crypto from 'crypto'
 import nodemailer from 'nodemailer'
 import { Schema, type MongoId } from 'mongoose'
+
+import axios from 'axios'
+
 import emailConfig from 'config/email'
 import phoneConfig from 'config/phone'
 import siteConfig from 'config/site'
@@ -12,12 +16,7 @@ import createError from './createError'
 
 import model from './model'
 
-
-import { TopClient } from './topClient'
-
 const emailSend = nodemailer.createTransport(emailConfig)
-
-const phoneSend = new TopClient(phoneConfig)
 
 
 const schema: Schema<VerificationModel> = new Schema({
@@ -61,7 +60,7 @@ const schema: Schema<VerificationModel> = new Schema({
               break
           }
           if (!value) {
-            this.invalidate(toType, locale.getLanguagePackValue(['errors', 'match']), to, 'match')
+            this.invalidate(toType, locale.getLanguageValue(['errors', 'match']), to, 'match')
             return
           }
           this.set('to', value)
@@ -139,32 +138,55 @@ schema.preAsync('save', async function () {
         })
       })
       break
-    case 'sms':
-      await new Promise((resolve, reject) => {
-        phoneSend.execute('alibaba.aliqin.fc.sms.num.send', {
-          extend: '',
-          sms_type: 'normal',
-          sms_free_sign_name: phoneConfig.sms_free_sign_name,
-          sms_param: JSON.stringify({ type, nickname, code }),
-          rec_num: to,
-          sms_template_code: phoneConfig.sms_template_code,
-        }, function (e, response) {
-          if (response && response.error_response) {
-            if (response.error_response.code === 15) {
-              throw createError(403, 'ratelimit', {
-                path: 'verification',
-                reset: Date.now() + 60 * 1000,
-                method: 'send',
-              })
-            }
-          }
-          if (e) {
-            return reject(e)
-          }
-          resolve(null)
-        })
+    case 'sms': {
+      let data: {[string]: string} = {
+        method: 'alibaba.aliqin.fc.sms.num.send',
+        sign_method: 'md5',
+        format: 'json',
+        v: '2.0',
+        timestamp: new Date().toISOString(),
+        app_key: phoneConfig.appkey,
+
+        ...phoneConfig.sms,
+        sms_type: 'normal',
+        sms_param: JSON.stringify({ type, nickname, code }),
+        rec_num: to,
+      }
+
+
+      let sorted: string[] = Object.keys(data).sort()
+      let sign: string = phoneConfig.appSecret
+      for (let i = 0, l = sorted.length; i < l; i++) {
+        let k: string = sorted[i]
+        sign += k + data[k]
+      }
+      sign += phoneConfig.appSecret
+      sign = crypto.createHash('md5').update(sign).digest('hex')
+      data.sign = sign
+
+      let response = await axios({
+        method: 'POST',
+        url: phoneConfig.restUrl || 'https://eco.taobao.com/router/rest',
+        responseType: 'json',
+        data,
       })
+      if (!response.data || typeof response.data !== 'object') {
+        throw createError(403, 'match', {
+          path: 'data',
+        })
+      }
+      if (response.error_response) {
+        if (response.error_response.code === 15) {
+          throw createError(403, 'ratelimit', {
+            path: 'verification',
+            reset: Date.now() + 60 * 1000,
+            method: 'send',
+          })
+        }
+        throw createError(500, response.error_response.sub_code || response.error_response.sub_msg || 'Server', { path: 'verification' })
+      }
       break
+    }
     default:
       throw createError(500, 'enum', { path: 'toType', value: toType })
   }
@@ -265,6 +287,7 @@ schema.statics.findByCode = async function findByCode(options: {
 
   return verification
 }
+
 
 
 export default (model('Verification', schema, {

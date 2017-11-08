@@ -54,7 +54,7 @@ export default async function (ctx: Context) {
   let token: ?Token
   let application: Application = ctx.state.application
   let params = {
-    ...(typeof ctx.request.body === 'object' ? ctx.request.body : {}),
+    ...(ctx.request.body && typeof ctx.request.body === 'object' ? ctx.request.body : {}),
     ...ctx.request.query
   }
 

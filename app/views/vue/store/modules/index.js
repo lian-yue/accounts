@@ -1,10 +1,25 @@
+/* @flow */
 import module from './module'
 import * as types from '../types'
 
 
+const token = module({
+  type: types.TOKEN,
+  clearType: types.TOKEN_CLEAR,
+  onOption(option: Object) {
+    option.path = '/token/me'
+    option.query = option.query || {
+      save: option.save,
+    }
+    return option
+  },
+  state: {
+  }
+})
+
 const userList = module({
   type: types.USER_LIST,
-  clearType: types.USER_READ_CLEAR,
+  clearType: types.USER_LIST_CLEAR,
   state: {
     results: [],
     more: true,
@@ -24,11 +39,9 @@ const userRead = module({
 
 
 
-
-
 const authList = module({
   type: types.AUTH_LIST,
-  clearType: types.AUTH_READ_CLEAR,
+  clearType: types.AUTH_LIST_CLEAR,
   state: {
     results: [],
     more: true,
@@ -47,12 +60,9 @@ const authRead = module({
 
 
 
-
-
-
 const applicationList = module({
   type: types.APPLICATION_LIST,
-  clearType: types.APPLICATION_READ_CLEAR,
+  clearType: types.APPLICATION_LIST_CLEAR,
   state: {
     results: [],
     more: true,
@@ -76,8 +86,8 @@ const applicationRead = module({
 
 
 const authorizeList = module({
-  type: types.AUTHORIZEL_LIST,
-  clearType: types.AUTHORIZEL_READ_CLEAR,
+  type: types.AUTHORIZE_LIST,
+  clearType: types.AUTHORIZE_LIST_CLEAR,
   state: {
     results: [],
     more: true,
@@ -85,8 +95,8 @@ const authorizeList = module({
 })
 
 const authorizeRead = module({
-  type: types.AUTHORIZEL_READ,
-  clearType: types.AUTHORIZEL_READ_CLEAR,
+  type: types.AUTHORIZE_READ,
+  clearType: types.AUTHORIZE_READ_CLEAR,
   state: {
     roles: [],
     cans: {},
@@ -96,12 +106,9 @@ const authorizeRead = module({
 
 
 
-
-
-
 const messageList = module({
   type: types.MESSAGE_LIST,
-  clearType: types.MESSAGE_READ_CLEAR,
+  clearType: types.MESSAGE_LIST_CLEAR,
   state: {
     results: [],
     more: true,
@@ -120,6 +127,7 @@ const messageRead = module({
 
 
 export {
+  token,
   userList,
   userRead,
   authList,

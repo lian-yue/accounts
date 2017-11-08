@@ -1,7 +1,8 @@
 /* @flow */
 import crypto from 'crypto'
 import querystring from 'querystring'
-import request from 'request-promise'
+import axios from 'axios'
+import oauth from 'oauth-sign'
 import createError  from '../../createError'
 
 import cache from '../../cache'
@@ -414,7 +415,7 @@ export default class Api {
   }
 
   response(response: Object): Object {
-    let body: Object = response.body ? JSON.parse(response.body) : {}
+    let body: Object = response.data ? JSON.parse(response.data) : {}
 
     let message
     if (body.error_description) {
@@ -452,14 +453,75 @@ export default class Api {
     let bodyString: string = querystring.stringify(body)
 
     let url = this.getUri(path, params)
+    if (args.oauth) {
+      let oa = {}
+      for (let key in args.oauth) {
+        oa['oauth_' + key] = args.oauth[key]
+      }
 
-    return request({
+      if (!oa.oauth_version) {
+        oa.oauth_version = '1.0'
+      }
+
+      if (!oa.oauth_timestamp) {
+        oa.oauth_timestamp = Math.floor(Date.now() / 1000).toString()
+      }
+
+      if (!oa.oauth_nonce) {
+        oa.oauth_nonce = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2)
+      }
+
+      let consumer_secret: string = oa.oauth_consumer_secret || oa.oauth_private_key // eslint-disable-line camelcase
+      delete oa.oauth_consumer_secret
+      delete oa.oauth_private_key
+
+
+      let token_secret: string = oa.oauth_token_secret
+      delete oa.oauth_token_secret
+
+      let realm: string = oa.oauth_realm
+      delete oa.oauth_realm
+      delete oa.oauth_transport_method
+
+
+      oa.oauth_signature = oauth.sign(
+        'HMAC-SHA1',
+        method,
+        this.getUri(path),
+        { ...params, ...body, ...oa },
+        consumer_secret,
+        token_secret,
+      )
+
+      if (realm) {
+        oa.realm = realm
+      }
+      delete args.oauth
+
+      let sorts = Object.keys(oa).filter(function (i) {
+        return i !== 'realm' && i !== 'oauth_signature'
+      }).sort()
+
+      if (oa.realm) {
+        sorts.unshift('realm')
+      }
+      sorts.push('oauth_signature')
+
+      // headers
+      headers.Authorization = 'OAuth ' + sorts.map(key => key + `="${oauth.rfc3986(oa[key])}"`).join(',')
+    }
+
+    return axios({
       url,
       timeout: this.timeout,
       method,
       headers,
-      body: bodyString || null,
-      resolveWithFullResponse: true,
+      data: bodyString || null,
+      validateStatus(status) {
+        return status >= 100 && status < 600
+      },
+      responseType: 'text',
+      maxRedirects: 3,
       ...args,
     }).then(this.response)
   }

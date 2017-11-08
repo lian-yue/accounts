@@ -2,11 +2,13 @@ const fs                   = require('fs')
 const path                 = require('path')
 const webpack              = require('webpack')
 const webpackMerge         = require('webpack-merge')
-// const { VueSSRServerPlugin } = require('vue-ssr-webpack-plugin')
+const { VueSSRServerPlugin } = require('vue-ssr-webpack-plugin')
 
 
 const packageInfo       = require('./package')
 const site              = require('./config/site')
+const vueLoader         = require('./vueLoader')
+
 
 const ignoreModules = fs.readdirSync('node_modules')
 
@@ -18,7 +20,8 @@ const isDev = process.env.NODE_ENV === 'development'
 
 
 function config(opts = {}) {
-  const publicPath = site.assets + Object.keys(opts.entry)[0] + '/'
+  const names = Object.keys(opts.entry)
+  const publicPath = site.assets + names[0] + '/'
   return webpackMerge({
     output: {
       path: path.resolve(__dirname, isDev ? 'dev' : 'dist'),
@@ -54,7 +57,9 @@ function config(opts = {}) {
       },
 
       extensions: [
+        isDev ? '.dev.vue' : '.prod.vue',
         isDev ? '.dev.js' : '.prod.js',
+        '.vue',
         '.js',
         '.json',
         '.ejs',
@@ -76,9 +81,9 @@ function config(opts = {}) {
           return callback(null, 'commonjs2 ' + request)
         }
 
-        //  config 配置文件
+        // config 配置文件
         if (pathStart === 'config') {
-          return callback(null, 'commonjs2 ../' + request)
+          return callback(null, names[0] === 'vue' ? 'commonjs2 ../../' + request : 'commonjs2 ../' + request)
         }
 
         //  package 配置文件
@@ -109,11 +114,6 @@ function config(opts = {}) {
     module: {
       rules: [
         {
-          test: /\.(jsx?|vue)$/,
-          loader: 'eslint-loader',
-          enforce: 'pre',
-        },
-        {
           test: /\.ejs$/,
           use: [
             {
@@ -130,84 +130,12 @@ function config(opts = {}) {
                 cacheDirectory: isDev
               }
             },
+            {
+              loader: 'eslint-loader',
+            }
           ],
         },
-        {
-          test: /\.vue$/,
-          loader: 'vue-loader',
-          options: {
-            cssModules: {
-              localIdentName: '[hash:base64:8]',
-              camelCase: true,
-            },
-            loaders: {
-              css: [
-                {
-                  loader: 'vue-style-loader',
-                },
-                {
-                  loader: 'css-loader',
-                  options: {
-                    minimize: !isDev,
-                  },
-                }
-              ],
-              sass: [
-                {
-                  loader: 'vue-style-loader',
-                },
-                {
-                  loader: 'css-loader',
-                  options: {
-                    minimize: !isDev,
-                  },
-                },
-                {
-                  loader: 'sass-loader',
-                  options: {
-                    sourceMap: true,
-                    indentedSyntax: true,
-                    includePaths: [
-                      path.join(__dirname, 'node_modules'),
-                    ],
-                  }
-                },
-              ],
-              scss: [
-                {
-                  loader: 'vue-style-loader',
-                },
-                {
-                  loader: 'css-loader',
-                  options: {
-                    minimize: !isDev,
-                  },
-                },
-                {
-                  loader: 'sass-loader',
-                  options: {
-                    sourceMap: true,
-                    includePaths: [
-                      path.join(__dirname, 'node_modules'),
-                    ],
-                  },
-                },
-              ],
-              postcss: [
-                {
-                  loader: 'vue-style-loader',
-                },
-                {
-                  loader: 'css-loader',
-                  options: {
-                    minimize: !isDev,
-                    sourceMap: true,
-                  },
-                },
-              ],
-            }
-          }
-        },
+        vueLoader,
         {
           test: /\.(gif|jpe?g|png|webp|svg)(\?.*)?$/,
           use: [
@@ -282,252 +210,21 @@ const index = config({
   },
 })
 
+const vue = config({
+  entry: {
+    vue: [
+      path.resolve(__dirname, 'app/views/vue/server'),
+    ],
+  },
+  plugins: [
+    new VueSSRServerPlugin(),
+  ],
+})
+
 
 if (isDev) {
   index.entry.index.unshift('webpack/hot/poll?1000')
   index.plugins.push(new webpack.HotModuleReplacementPlugin())
 }
 
-module.exports = [index]
-
-
-
-
-/*
-
-        {
-          test: /\.(gif|jpg|png|webp|svg)\??.*$/,
-          use: [
-            {
-              loader: 'url-loader',
-              options: {
-                limit: 4096,
-                name: 'images/[name].[ext]?[hash:8]',
-                publicPath,
-                useRelativePath: !isDev,
-              }
-            }
-          ]
-        },
-        {
-          test: /\.(woff|eot|ttf|woff2|woff)\??.*$/,
-          use: [
-            {
-              loader: 'url-loader',
-              options: {
-                limit: 4096,
-                name: 'fonts/[name].[ext]?[hash:8]',
-                publicPath,
-                useRelativePath: !isDev,
-              }
-            }
-          ]
-        },
-module: {
-  rules: [
-    {
-      test: /\.jsx?$/,
-      use: [
-        {
-          loader: 'babel-loader',
-        },
-        {
-          loader: 'eslint-loader',
-        },
-      ],
-      exclude: [
-        path.resolve(__dirname, 'node_modules'),
-        path.resolve(__dirname, 'config'),
-        path.resolve(__dirname, 'dev'),
-        path.resolve(__dirname, 'dist'),
-      ],
-    },
-    {
-      test: /\.(css|less|scss|sass|styl)\??.*$/,
-      use: 'null-loader'
-    },
-  ]
-},
-*/
-
-
-/*
-{
-  test: /\.vue$/,
-  loader: 'vue-loader',
-  options: {
-    preserveWhitespace: false,
-    postcss: {
-      plugins() {
-        return [
-          precss,
-          autoprefixer
-        ]
-      }
-    },
-    cssModules: {
-      localIdentName: '[hash:base64:8]',
-      camelCase: true
-    },
-    loaders: {
-      sass: [
-        {
-          loader: 'vue-style-loader',
-        },
-        {
-          loader: 'css-loader',
-          options: {
-            minimize: !isDev,
-          },
-        },
-        {
-          loader: 'sass-loader',
-          options: {
-            sourceMap: true,
-            indentedSyntax: true,
-            includePaths: [
-              path.join(__dirname, 'node_modules'),
-            ],
-          }
-        },
-      ],
-      scss: [
-        {
-          loader: 'vue-style-loader',
-        },
-        {
-          loader: 'css-loader',
-          options: {
-            minimize: !isDev,
-          },
-        },
-        {
-          loader: 'sass-loader',
-          options: {
-            sourceMap: true,
-            includePaths: [
-              path.join(__dirname, 'node_modules'),
-            ],
-          },
-        },
-      ]
-    }
-  }
-},
-*/
-
-
-/*
-const vue = merge(base({ name: 'vue', externals: '../../' }), {
-  entry: {
-    vue: [
-      path.resolve(__dirname, 'app/views/vue/server'),
-    ],
-  },
-
-  resolve: {
-    extensions: [
-      isDev ? '.dev.vue' : '.prod.vue',
-      '.vue',
-    ],
-  },
-
-  module: {
-    rules: [
-      {
-        test: /\.vue$/,
-        loader: 'vue-loader',
-        options: {
-          preserveWhitespace: false,
-          postcss: {
-            plugins() {
-              return [
-                precss,
-                autoprefixer
-              ]
-            }
-          },
-          cssModules: {
-            localIdentName: '[hash:base64:8]',
-            camelCase: true
-          },
-          loaders: {
-            js: [
-              {
-                loader: 'babel-loader',
-              }
-            ],
-            sass: [
-              {
-                loader: 'vue-style-loader',
-              },
-              {
-                loader: 'css-loader',
-                options: {
-                  minimize: !isDev,
-                },
-              },
-              {
-                loader: 'sass-loader',
-                options: {
-                  sourceMap: true,
-                  indentedSyntax: true,
-                  includePaths: [
-                    path.join(__dirname, 'node_modules'),
-                  ],
-                }
-              },
-            ],
-            scss: [
-              {
-                loader: 'vue-style-loader',
-              },
-              {
-                loader: 'css-loader',
-                options: {
-                  minimize: !isDev,
-                },
-              },
-              {
-                loader: 'sass-loader',
-                options: {
-                  sourceMap: true,
-                  includePaths: [
-                    path.join(__dirname, 'node_modules'),
-                  ],
-                },
-              },
-            ]
-          }
-        }
-      },
-      {
-        test: /\.jsx?$/,
-        loader: 'babel-loader',
-        options: {
-          presets: [
-            'es2015',
-            'stage-0'
-          ],
-          plugins: [
-            'transform-vue-jsx',
-            'transform-decorators-legacy',
-            'transform-runtime',
-          ],
-          cacheDirectory: isDev
-        },
-      },
-    ]
-  },
-
-  plugins: [
-    new VueSSRServerPlugin(),
-  ],
-})
-*/
-/*
-module.exports = [
-  // vue,
-  index,
-]
-*/
+module.exports = [vue, index]

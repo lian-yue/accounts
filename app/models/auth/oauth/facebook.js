@@ -101,7 +101,7 @@ export default class Facebook extends Api {
   }
 
   response(response: Object): Object {
-    let body: Object = response.body ? JSON.parse(response.body) : {}
+    let body: Object = response.data ? JSON.parse(response.data) : {}
 
     let message
     if (body.error_description) {

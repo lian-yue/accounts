@@ -41,7 +41,6 @@ const revokeToken = tokenMiddleware({
 })
 
 const authorizeToken = tokenMiddleware({
-  types: ['access'],
   user: true,
   authorize: false,
   application: {

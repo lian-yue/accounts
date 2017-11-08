@@ -4,9 +4,8 @@ import Koa         from 'koa'
 import koaStatic   from 'koa-static'
 import statuses    from 'statuses'
 
-import moment      from 'moment'
-
 import packageInfo from 'package'
+
 
 global.__SERVER__ = true
 
@@ -160,7 +159,7 @@ app.use(async function (ctx, next) {
   await next()
   let ms = new Date - start
   let userAgent = ctx.request.header['user-agent'] || ''
-  console.log(`${ctx.method} ${ctx.status} ${ctx.url} - ${moment(start).format('YYYY-MM-DD hh:mm:ss')} - ${ms}ms - ${ctx.request.ip} - ${userAgent}`)
+  console.log(`${ctx.method} ${ctx.status} ${ctx.url} - ${start.toISOString()} - ${ms}ms - ${ctx.request.ip} - ${userAgent}`)
   ctx.set('X-Response-Time', ms + 'ms')
   ctx.set('X-Version', packageInfo.version)
   ctx.set('X-Author', packageInfo.author)
@@ -223,7 +222,7 @@ app.use(function (ctx) {
 
 // 错误捕获
 app.on('error', function (error: Error, ctx): void {
-  let date: string = moment().format('YYYY-MM-DD hh:mm:ss')
+  let date: string = (new Date).toISOString()
   if (!error.status || Number(error.status) >= 500) {
     console.error(date, 'server error :', error, ctx)
   } else {

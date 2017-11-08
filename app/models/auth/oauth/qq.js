@@ -103,7 +103,7 @@ export default class QQ extends Api {
 
 
   response(response: Object): Object {
-    let body = response.body.trim().replace(/[\r\n\t ;]$/g, '')
+    let body = response.data.trim().replace(/[\r\n\t ;]$/g, '')
     if (body.substr(0, 9) === 'callback(') {
       body = body.substr(9, -1).trim()
     }

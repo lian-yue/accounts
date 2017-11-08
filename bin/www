@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 process.env.NODE_ENV = process.env.NODE_ENV || 'production'
 if (process.env.NODE_ENV === 'development' && !process.env.DEBUG) {
-  process.env.DEBUG = '*,-babel,-koa-send,-mquery,-eslint:*'
+  process.env.DEBUG = '*,-babel,-koa-send,-mquery,-eslint:*,-vue-eslint-parser'
 }
 
 const debug = require('debug')('server')
@@ -31,7 +31,6 @@ if (process.env.NODE_ENV === 'development') {
       data.errors.forEach(err => console.error(err))
       data.warnings.forEach(err => console.warn(err))
 
-
       if (configs[key]) {
         watch()
       } else if (!isServer) {
@@ -55,19 +54,19 @@ function createServer() {
   let app
   if (process.env.NODE_ENV === 'development') {
     app = require('../dev').default
-    // let koaWebpack = require('koa-webpack')
-    // let configs = require('../webpack.config.client')
-    // configs.forEach(function (config) {
-    //   app.middleware.unshift(koaWebpack({
-    //     config,
-    //     dev: {
-    //       noInfo: true,
-    //     },
-    //     hot: {
-    //       noInfo: true,
-    //     },
-    //   }))
-    // })
+    let koaWebpack = require('koa-webpack')
+    let configs = require('../webpack.config.client')
+    configs.forEach(function (config) {
+      app.middleware.unshift(koaWebpack({
+        config,
+        dev: {
+          noInfo: true,
+        },
+        hot: {
+          noInfo: true,
+        },
+      }))
+    })
   } else {
     app = require('../dist').default
   }

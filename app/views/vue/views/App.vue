@@ -89,8 +89,8 @@ input[type=radio]
       display: none
 </style>
 <script>
+/* @flow */
 import { mapState } from 'vuex'
-
 import site from 'config/site'
 import { MESSAGES_CLOSE } from '../store/types'
 
@@ -103,7 +103,7 @@ const MessagesPopup = {
       }
       e && e.preventDefault()
       if (this.messages.popup && !this.messages.popup.close) {
-        this.$store.commit({type: MESSAGES_CLOSE, name: 'popup'})
+        this.$store.commit({ type: MESSAGES_CLOSE, name: 'popup' })
       }
     }
   },
@@ -113,13 +113,13 @@ const MessagesPopup = {
       if (__SERVER__) {
         return
       }
-      var popup = this.messages.popup
+      let popup = this.messages.popup
       if (popup && !popup.close) {
         if (this.timrer) {
           clearTimeout(this.timrer)
           this.timrer = null
         }
-        if (popup.canClose || popup.canClose === void 0) {
+        if (popup.canClose || popup.canClose === undefined) {
           this.timrer = setTimeout(() => {
             this.onClose()
           }, 3000)
@@ -132,7 +132,7 @@ const MessagesPopup = {
       }
     },
   },
-  render (h) {
+  render(h) {
     return h(
       'div',
       {
@@ -165,17 +165,9 @@ export default {
 
   computed: mapState(['headers']),
 
-  methods: {
-  },
-
   data() {
     return Object.assign({
-      github: '#',
-      email: '#',
-      feed: '#',
     }, site)
-  },
-  mounted() {
   },
 }
 </script>

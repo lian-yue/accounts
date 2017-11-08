@@ -44,7 +44,7 @@ const schema: Schema<AuthorizeModel> = new Schema({
                 path: 'roles',
                 maximum: 8,
                 type: 'maximum',
-                message: locale.getLanguagePackValue(['errors', 'maximum']),
+                message: locale.getLanguageValue(['errors', 'maximum']),
                 value,
               }))
             },
@@ -59,7 +59,7 @@ const schema: Schema<AuthorizeModel> = new Schema({
               let role = await Role.findById(id).read('primary').exec()
               return role && role.get('application').equals(parent.get('application'))
             },
-            message: locale.getLanguagePackValue(['errors', 'notexist']),
+            message: locale.getLanguageValue(['errors', 'notexist']),
           },
         ],
       },

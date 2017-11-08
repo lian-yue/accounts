@@ -1,7 +1,8 @@
 <% const site = require('config/site') %><!DOCTYPE html>
-<html lang="zh-CN">
+<html {{{htmlAttrs}}}>
   <head>
     <meta charset="utf-8">
+    <title>{{title}}</title>
     <meta httpEquiv="Cache-Control" content="no-siteapp" />
     <meta httpEquiv="Cache-Control" content="no-transform" />
     <meta httpEquiv="X-UA-Compatible" content="IE=Edge, chrome=1" />
@@ -10,7 +11,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="msapplication-tap-highlight" content="no" />
     <meta name="applicable-device" content="pc, mobile" />
-    <meta property="og:locale" content="zh_CN" />
     <meta property="og:site_name" content="<%= site.title %>" />
     <meta property="twitter:site" content="<%= site.title %>" />
     <!--[if lt IE 9]>

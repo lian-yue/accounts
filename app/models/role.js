@@ -57,7 +57,7 @@ const schema: Schema<RoleModel> = new Schema({
               path: 'children',
               maximum: 8,
               type: 'maximum',
-              message: locale.getLanguagePackValue(['errors', 'maximum']),
+              message: locale.getLanguageValue(['errors', 'maximum']),
               value,
             }))
           },
@@ -65,7 +65,7 @@ const schema: Schema<RoleModel> = new Schema({
         {
           isAsync: true,
           type: 'notexist',
-          message: locale.getLanguagePackValue(['errors', 'notexist']),
+          message: locale.getLanguageValue(['errors', 'notexist']),
           async validator(id) {
             if (!this.$isValid('children')) {
               return true
@@ -96,7 +96,7 @@ const schema: Schema<RoleModel> = new Schema({
                 path: 'rules',
                 maximum: 32,
                 type: 'maximum',
-                message: locale.getLanguagePackValue(['errors', 'maximum']),
+                message: locale.getLanguageValue(['errors', 'maximum']),
                 value,
               }))
             },

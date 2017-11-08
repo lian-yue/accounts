@@ -2,6 +2,7 @@
 <main>
   <section id="content">
     <div id="not-found">
+      {{$t('views.error', 'Error')}}
     </div>
   </section>
 </main>
@@ -9,7 +10,7 @@
 <script>
 import site from 'config/site'
 
-import {MESSAGES} from '../../store/types'
+import { MESSAGES } from '../../store/types'
 
 export default {
   watch: {
@@ -26,7 +27,7 @@ export default {
       this.$store.commit({
         type: MESSAGES,
         name: 'popup',
-        message: '您请求的页面不存在'
+        message: 'notexist'
       })
     }
   },
@@ -35,16 +36,17 @@ export default {
     this.messageAuto()
   },
 
-
-  headers({state}) {
-    var title = '错误消息'
+  headers() {
+    let title = this.$t('views.error', 'Error')
     return {
       status: 404,
-      title: [title, site.title],
-      meta: [
-        {name: 'robots', content:'none'},
+      title: [
+        title,
+        site.title
       ],
-      breadcrumb: [title],
+      meta: [
+        { name: 'robots', content: 'none' },
+      ],
     }
   }
 }

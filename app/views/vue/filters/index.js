@@ -1,30 +1,21 @@
-import moment from 'moment'
+/* @flow */
 import site from 'config/site'
 import queryString from 'query-string'
 
-export function fromNow(time) {
-  return moment(time).fromNow()
-}
-
-export function fromDate(time, fromt) {
-  return moment(time).format(fromt)
-}
-
-export function toUrl(path, query, state) {
+export function toUrl(path: string, query: string | Object = '', state?: Object): string {
+  let search: string
   if (!query) {
-    query = ''
-  } else if (typeof query == 'object') {
-    query = queryString.stringify(query)
-    if (query) {
-      query = '?' + query
+    search = ''
+  } else if (typeof query === 'object') {
+    search = queryString.stringify(query)
+    if (search) {
+      search = '?' + search
     }
   } else {
-    if (query.substr(0, 1) == '?') {
-      query = '?' + query
-    }
+    search = query.substr(0, 1) === '?' ? query : '?' + query
   }
   if (state) {
-    return state.protocol + ':' +  site.url + path + query
+    return state.protocol + ':' + site.url + path + search
   }
-  return path + query
+  return path + search
 }

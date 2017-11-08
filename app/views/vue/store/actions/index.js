@@ -1,10 +1,3 @@
-import { TOKEN } from '../types'
+/* @flow */
 export default {
-  async [TOKEN]({commit}, payload) {
-    var token = await commit.fetch('/auth/token', {create: payload.create})
-    commit({
-      type: TOKEN,
-      token,
-    })
-  }
 }
