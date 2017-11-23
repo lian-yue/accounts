@@ -11,12 +11,12 @@ export default async function (ctx: Context, next: () => Promise<void>) {
 
   ctx.set('Cache-Control', 'no-cache,must-revalidate,max-age=0')
   let OAuth = oauths[column]
-  if (OAuth || !oauthConfig[column]) {
+  if (!OAuth || !oauthConfig[column]) {
     ctx.throw(403, 'match', { path: 'column' })
   }
 
   const oauth: Api = new OAuth
-  oauth.setRedirectUri(ctx.request.protocol + '://' + ctx.request.host + ctx.request.path.replace(/[^\/]+\/?$/g, ''))
+  oauth.setRedirectUri(ctx.request.protocol + '://' + ctx.request.host + ctx.request.path.replace(/\/[^\/]+\/?$/g, ''))
   oauth.setKey(column + token.get('id'))
   ctx.state.oauth = oauth
   await next()

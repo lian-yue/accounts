@@ -20,7 +20,7 @@ export default class Twitter extends Api {
 
   requestTokenPath: string = '/oauth/request_token'
 
-  name: string = config.name
+  id: string = 'twitter'
 
   constructor(clientId: string = config.consumer_key, clientSecret: string = config.consumer_secret) {
     super(clientId, clientSecret)

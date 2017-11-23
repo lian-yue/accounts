@@ -1,7 +1,7 @@
 <template>
 <div id="app">
   <router-view></router-view>
-  <messages-popup></messages-popup>
+  <message-popup></message-popup>
 </div>
 </template>
 <style lang="sass">
@@ -68,13 +68,13 @@ input[type=radio]
 .hide
   display: none
 
-#messages-popup
+#message-popup
   max-width: 300px
   z-index: 1040
   position: fixed
   top: 40%
   left: 50%
-  .messages
+  .message
     transform: translate(-50%, -50%)
     text-align: center
     background: rgba($black, .8)
@@ -91,10 +91,9 @@ input[type=radio]
 <script>
 /* @flow */
 import { mapState } from 'vuex'
-import site from 'config/site'
-import { MESSAGES_CLOSE } from '../store/types'
+import { MESSAGE_CLEAR } from '../store/types'
 
-const MessagesPopup = {
+const MessagePopup = {
   methods: {
     onClose(e) {
       if (this.timrer) {
@@ -102,18 +101,18 @@ const MessagesPopup = {
         this.timrer = null
       }
       e && e.preventDefault()
-      if (this.messages.popup && !this.messages.popup.close) {
-        this.$store.commit({ type: MESSAGES_CLOSE, name: 'popup' })
+      if (this.message.popup && !this.message.popup.close) {
+        this.$store.commit({ type: MESSAGE_CLEAR, name: 'popup' })
       }
     }
   },
-  computed: mapState(['messages', 'route']),
+  computed: mapState(['message', 'route']),
   watch: {
-    messages() {
+    message() {
       if (__SERVER__) {
         return
       }
-      let popup = this.messages.popup
+      let popup = this.message.popup
       if (popup && !popup.close) {
         if (this.timrer) {
           clearTimeout(this.timrer)
@@ -137,7 +136,7 @@ const MessagesPopup = {
       'div',
       {
         attrs: {
-          id: 'messages-popup'
+          id: 'message-popup'
         },
         on: {
           dblclick: this.onClose
@@ -145,7 +144,7 @@ const MessagesPopup = {
       },
       [
         h(
-          'messages',
+          'message',
           {
             props: {
               name: 'popup',
@@ -160,14 +159,7 @@ const MessagesPopup = {
 
 export default {
   components: {
-    MessagesPopup
-  },
-
-  computed: mapState(['headers']),
-
-  data() {
-    return Object.assign({
-    }, site)
+    MessagePopup
   },
 }
 </script>

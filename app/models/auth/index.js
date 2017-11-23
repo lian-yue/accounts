@@ -25,12 +25,14 @@ const schema: Schema<AuthModel> = new Schema({
     type: String,
     index: true,
     required: true,
+    maxlength: 255,
   },
   value: {
     type: String,
     index: true,
     lowercase: true,
     trim: true,
+    maxlength: 255,
     validate: [
       {
         validator(value) {
@@ -326,7 +328,7 @@ schema.pre('save', function (next) {
  * 自动更新用户的属性
  * @return {[type]} [description]
  */
-schema.pre('save', async function () {
+schema.preAsync('save', async function () {
   let column: string = this.get('column')
   if (column === 'username') {
     return
@@ -351,7 +353,7 @@ schema.pre('save', async function () {
     auth = this
   }
 
-  let user = await User.findById(this.get('user')).read('primary').exec()
+  let user: ?UserModel = await User.findById(this.get('user')).read('primary').exec()
   if (!user) {
     return
   }
@@ -369,7 +371,7 @@ schema.pre('save', async function () {
   }
 
   if (user.isModified('auths')) {
-    this.oncePost(user)
+    this.oncePost(() => { return user ? user.save() : false })
   }
 })
 

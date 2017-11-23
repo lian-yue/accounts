@@ -52,15 +52,17 @@ const schema: Schema<TokenModel> = new Schema({
   ],
 
   renewal: {
-    type: Boolean,
+    type: Schema.Types.Integer,
+    min: 0,
+    max: 1000 * 86400 * 30 * 6,
     default() {
       if (this.get('type') === 'refresh') {
-        return true
+        return 1000 * 86400 * 30
       }
       if (this.get('client')) {
-        return true
+        return 1000 * 86400 * 30
       }
-      return false
+      return 0
     },
   },
 
@@ -130,20 +132,17 @@ const schema: Schema<TokenModel> = new Schema({
     index: true,
     default() {
       let date = new Date
-      switch (this.get('type')) {
-        case 'code':
-          date.setTime(date.getTime() + 1000 * 600)
-          break
-        case 'refresh':
-          date.setTime(date.getTime() + 1000 * 86400 * 1)
-          break
-        default:
-          if (this.get('renewal')) {
-            date.setTime(date.getTime() + 1000 * 86400 * 30)
-          } else {
-            date.setTime(date.getTime() + 1000 * 86400 * 1)
-          }
+      let timems: number = 0
+      if (this.get('renewal')) {
+        timems = this.get('renewal')
+      } else if (this.get('type') === 'code') {
+        timems = 1000 * 600
+      } else if (this.get('type') === 'refresh') {
+        timems = 1000 * 86400 * 30
+      } else {
+        timems = 1000 * 86400 * 1
       }
+      date.setTime(date.getTime() + timems)
       return date
     }
   },

@@ -1,5 +1,6 @@
 /* @flow */
 import crypto from 'crypto'
+import querystring from 'querystring'
 import nodemailer from 'nodemailer'
 import { Schema, type MongoId } from 'mongoose'
 
@@ -144,12 +145,12 @@ schema.preAsync('save', async function () {
         sign_method: 'md5',
         format: 'json',
         v: '2.0',
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(Date.now() + 1000 * 60 * 60 * 8).toISOString().replace('T', ' ').replace(/\..+$/, ''),
         app_key: phoneConfig.appkey,
-
+        extend: '',
         ...phoneConfig.sms,
         sms_type: 'normal',
-        sms_param: JSON.stringify({ type, nickname, code }),
+        sms_param: JSON.stringify({ used: type, nickname, code }),
         rec_num: to,
       }
 
@@ -161,29 +162,33 @@ schema.preAsync('save', async function () {
         sign += k + data[k]
       }
       sign += phoneConfig.appSecret
-      sign = crypto.createHash('md5').update(sign).digest('hex')
+      sign = crypto.createHash('md5').update(sign).digest('hex').toUpperCase()
       data.sign = sign
 
       let response = await axios({
         method: 'POST',
         url: phoneConfig.restUrl || 'https://eco.taobao.com/router/rest',
         responseType: 'json',
-        data,
+        data: querystring.stringify(data),
       })
+
       if (!response.data || typeof response.data !== 'object') {
         throw createError(403, 'match', {
           path: 'data',
         })
       }
-      if (response.error_response) {
-        if (response.error_response.code === 15) {
+      let responseData: Object = response.data
+      if (responseData.error_response) {
+        let message = responseData.error_response.sub_code || responseData.error_response.sub_msg || responseData.error_response.msg
+        if (responseData.error_response.code === 15) {
           throw createError(403, 'ratelimit', {
             path: 'verification',
             reset: Date.now() + 60 * 1000,
             method: 'send',
+            responseMessage: message,
           })
         }
-        throw createError(500, response.error_response.sub_code || response.error_response.sub_msg || 'Server', { path: 'verification' })
+        throw createError(500, message || 'Server', { path: 'verification' })
       }
       break
     }
@@ -196,6 +201,7 @@ schema.preAsync('save', async function () {
 
 
 schema.set('toJSON', {
+  virtual: true,
   transform(doc: VerificationModel, ret) {
     delete ret.code
     delete ret.ip

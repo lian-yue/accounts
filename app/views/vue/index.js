@@ -8,7 +8,7 @@ import type { Context } from 'koa'
 function createRenderer() {
   // $flow-disable-line
   return createBundleRenderer(require('vue-ssr-bundle'), {
-    template: require('./template.ejs')({}),
+    template: require('./template'),
     runInNewContext: false,
     cache: cache({
       max: 1000,
@@ -20,7 +20,7 @@ function createRenderer() {
 let renderer = createRenderer()
 
 export default async function (ctx: Context, next: () => Promise<void>): Promise<void> {
-  if (['GET', 'HEAD'].indexOf(ctx.method) === -1 || ctx.path.substr(0, 6) === '/oauth' || (ctx.query.format && ctx.query.format !== 'vue' && ctx.query.format !== 'vuejs')) {
+  if (['GET', 'HEAD'].indexOf(ctx.method) === -1 || (ctx.path.indexOf('/oauth') === 0 && ctx.path.indexOf('/oauth/authorize') !== 0) || (ctx.query.format && ctx.query.format !== 'vue' && ctx.query.format !== 'vuejs')) {
     await next()
     return
   }

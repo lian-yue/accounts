@@ -1,11 +1,9 @@
 /* @flow */
+export const SITE: string = 'site/INDEX'
+export const SITE_CLEAR: string = 'site/CLEAR'
 
-export const PROTOCOL: string = 'PROTOCOL'
-
-export const MESSAGES: string = 'MESSAGES'
-export const MESSAGES_CLOSE: string = 'MESSAGES_CLOSE'
-
-
+export const MESSAGE: string = 'message/INDEX'
+export const MESSAGE_CLEAR: string = 'message/CLEAR'
 
 export const TOKEN: string = 'token/INDEX'
 export const TOKEN_CLEAR: string = 'token/CLEAR'

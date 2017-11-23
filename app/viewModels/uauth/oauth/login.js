@@ -10,7 +10,7 @@ export default async function (ctx: Context) {
     ...(ctx.request.body && typeof ctx.request.body === 'object' ? ctx.request.body : {}),
   }
 
-  let redirectUri = String(params.redirect_uri || '/')
+  let redirectUri = String(params.redirectUri || params.redirect_uri || '/')
   redirectUri = await oauth.getAuthorizeUri({}, { redirectUri })
 
   ctx.vmState({ redirectUri })

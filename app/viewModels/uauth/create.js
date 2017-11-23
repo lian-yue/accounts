@@ -21,7 +21,7 @@ export default async function (ctx: Context) {
   let username = String(params.username || '').trim()
   let nickname = String(params.nickname || '').trim() || username
   let password = String(params.password || '')
-  let passwordAgain = String(params.password_again || '')
+  let passwordAgain = String(params.passwordAgain || params.password_again || '')
   let gender = String(params.gender || '').trim()
   let birthday = params.birthday ? new Date(String(params.birthday || '').trim()) : undefined
   let description = String(params.description || '')
@@ -31,9 +31,8 @@ export default async function (ctx: Context) {
 
   let email = String(params.email || '').trim()
   let phone = String(params.phone || '').trim()
-  let emailCode = String(params.email_code || '').trim()
-  let phoneCode = String(params.phone_code || '').trim()
-  let createType = String(params.create_type || '')
+  let emailCode = String(params.emailCode || params.email_code || '').trim()
+  let phoneCode = String(params.phoneCode || params.phone_code || '').trim()
 
   let token: Token = ctx.state.token
   let application: Application | void = token.get('application')
@@ -61,7 +60,7 @@ export default async function (ctx: Context) {
     throw validate
   }
 
-  if (createType === 'email' || email) {
+  if (column === 'email' || email) {
     authEmail = new Auth({
       column: 'email',
       value: email,
@@ -70,7 +69,7 @@ export default async function (ctx: Context) {
     auths.push(authEmail)
   }
 
-  if (createType === 'phone' || phone) {
+  if (column === 'phone' || phone) {
     authPhone = new Auth({
       column: 'phone',
       value: phone,
@@ -79,10 +78,7 @@ export default async function (ctx: Context) {
     auths.push(authPhone)
   }
 
-  if (createType === 'column' || column) {
-    if (!oauthConfig[column]) {
-      ctx.throw(403, 'match', { path: 'column' })
-    }
+  if (oauthConfig[column]) {
     let state: Object = token.get('state.auth.' + column) || {}
     let userInfo: Object = state.userInfo
     if (!userInfo || !userInfo.id || (Date.now() - 1800 * 10000) > state.createdAt.getTime()) {
@@ -146,7 +142,7 @@ export default async function (ctx: Context) {
     }
   }
 
-  if (authEmail && ctx.app.env !== 'development') {
+  if (authEmail && (ctx.app.env !== 'development' || emailCode.length < 6)) {
     let verification  = await Verification.findByCode({
       token,
       type: 'user_save',
@@ -159,7 +155,7 @@ export default async function (ctx: Context) {
     }
   }
 
-  if (authPhone && ctx.app.env !== 'development') {
+  if (authPhone && (ctx.app.env !== 'development' || phoneCode.length < 6)) {
     let verification  = await Verification.findByCode({
       token,
       type: 'user_save',
@@ -196,7 +192,10 @@ export default async function (ctx: Context) {
   if (application) {
     authorize = await Authorize.findOneCreate(user, application)
   }
-
+  if (token.get('renewal') > (1000 * 3600)) {
+    token.set('renewal', 1000 * 3600)
+    token.set('expiredAt', Date.now() + 1000 * 3600)
+  }
   token.set('user', user)
   token.set('authorize', authorize)
   await token.save()

@@ -17,8 +17,7 @@ export default class Facebook extends Api {
 
   authorizePath: string = 'https://www.facebook.com/v2.10/dialog/oauth'
 
-  name: string = config.name
-
+  id: string = 'facebook'
 
   constructor(clientId: string = config.appId, clientSecret: string = config.appSecret) {
     super(clientId, clientSecret)

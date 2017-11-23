@@ -20,30 +20,41 @@ export default function createRouter(store: Object): Router {
       }
     },
     routes: [
-      /*
       {
-        path: '/auth',
-        component: () => import('./views/auth/Index'),
+        path: '/uauth',
+        component: () => import('./views/uauth/Index'),
         children: [
           {
             path: '',
-            component: () => import('./views/auth/Login'),
+            component: () => import('./views/uauth/Login'),
+            meta: {
+              user: false,
+            },
           },
           {
             path: 'login',
-            component: () => import('./views/auth/Login'),
+            component: () => import('./views/uauth/Login'),
+            meta: {
+              user: false,
+            },
           },
           {
             path: 'create',
-            component: () => import('./views/auth/Create'),
+            component: () => import('./views/uauth/Create'),
+            meta: {
+              user: false,
+            },
           },
           {
             path: 'password',
-            component: () => import('./views/auth/Password'),
+            component: () => import('./views/uauth/Password'),
+            meta: {
+              user: false,
+            },
           },
           {
             path: 'oauth',
-            component: () => import('./views/auth/OAuth'),
+            component: () => import('./views/uauth/OAuth'),
           },
         ],
       },
@@ -143,13 +154,17 @@ export default function createRouter(store: Object): Router {
   })
 
 
-
   // 登录判断
   router.beforeEach(function (to, from, next) {
-    if (to.meta.login && !store.state.token.user) {
+    if (to.meta.user && !store.state.token.user) {
       next({
-        path: '/auth/login',
+        path: '/uauth',
         query: { message: 'notlogged', redirect_uri: to.fullPath }
+      })
+    } else if (to.meta.user === false && store.state.token.user) {
+      next({
+        path: to.query.redirect_uri || '/',
+        query: { message: 'haslogged' }
       })
     } else {
       next()
@@ -157,6 +172,5 @@ export default function createRouter(store: Object): Router {
   })
 
   sync(store, router)
-
   return router
 }

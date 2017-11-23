@@ -5,7 +5,6 @@
 </template>
 
 <style lang="sass">
-@import "../../styles/variables"
 .form-group
   margin-bottom: 1rem
 </style>

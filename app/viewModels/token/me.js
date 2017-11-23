@@ -43,10 +43,14 @@ export default async function (ctx: Context) {
         }
       }
     }
+    let renewal = Number(params.renewal || (1000 * 86400 * 30))
+    if (isNaN(renewal) || renewal < 1 || renewal > 1000 * 86400 * 30) {
+      renewal = 0
+    }
 
 
     token = new Token({
-      renewal: true,
+      renewal,
       scopes,
       application,
     })

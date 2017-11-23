@@ -22,6 +22,12 @@ export default {
       return
     }
     this.installed = true
+
+
+    if (!Vue.prototype.$updateHeaders) {
+      Vue.mixin(mixin)
+    }
+
     Vue.prototype.$updateHeaders = function () {
       let options: Object = this.$options
       if (!options.headers) {
@@ -35,9 +41,9 @@ export default {
         status,
       }: {
         html: Object,
-        title: string[],
-        link: Object[],
-        meta: Object[],
+        title: Array<string | void | null>,
+        link: Array<Object | void | null>,
+        meta: Array<Object | void | null>,
         status?: number,
       } = options.headers.call(this)
       if (__SERVER__) {
@@ -45,18 +51,22 @@ export default {
           this.$ssrContext.context.status = status
         }
 
-
-        this.$ssrContext.htmlAttrs = attrsToString(html)
-        this.$ssrContext.title = title.join(' - ')
-
+        this.$ssrContext.htmlattrs = attrsToString(html)
+        this.$ssrContext.title = title.filter(value => typeof value === 'string' || title).join(' - ')
         this.$ssrContext.head = this.$ssrContext.head || ''
         for (let i = 0; i < link.length; i++) {
           let attrs = link[i]
-          this.$ssrContext.head += '<link ' + attrsToString(attrs) + ' data-header />\n'
+          if (!attrs) {
+            continue
+          }
+          this.$ssrContext.head += '<link ' + attrsToString(attrs) + ' data-header />'
         }
         for (let i = 0; i < meta.length; i++) {
           let attrs = meta[i]
-          this.$ssrContext.head += '<meta ' + attrsToString(attrs) + ' data-header />\n'
+          if (!attrs) {
+            continue
+          }
+          this.$ssrContext.head += '<meta ' + attrsToString(attrs) + ' data-header />'
         }
       } else {
         // removeHead
@@ -71,7 +81,10 @@ export default {
         if (document.documentElement) {
           let attributes = document.documentElement.attributes
           for (let i = 0; i < attributes.length; i++) {
-            document.documentElement.removeAttribute(attributes[i].name)
+            let name = attributes[i].name
+            if (name !== 'lang') {
+              document.documentElement.removeAttribute(name)
+            }
           }
         }
 
@@ -91,7 +104,10 @@ export default {
         // meta
         if (head) {
           for (let i = 0; i < meta.length; i++) {
-            let attrs: Object = meta[i]
+            let attrs: ?Object = meta[i]
+            if (!attrs) {
+              continue
+            }
             let element = document.createElement('meta')
             for (let name in attrs) {
               element.setAttribute(name, attrs[name])
@@ -102,7 +118,10 @@ export default {
 
           // link
           for (let i = 0; i < link.length; i++) {
-            let attrs: Object = link[i]
+            let attrs: ?Object = link[i]
+            if (!attrs) {
+              continue
+            }
             let element = document.createElement('link')
             for (let name in attrs) {
               element.setAttribute(name, attrs[name])
@@ -111,11 +130,8 @@ export default {
             head.appendChild(element)
           }
         }
-
-
       }
     }
-    Vue.mixin(mixin)
   }
 }
 

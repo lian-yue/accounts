@@ -34,26 +34,35 @@ $link: (
   hover-color: darken($blue, 15%),
 );
 
-$messages-default: (
+$message-default: (
   bg: $white,
   color: $black,
-  shadow: 0 1px 1px 0 rgba($black, .1),
 );
-$messages: (
+$message: (
   danger: (
-    border: $red,
+    color: darken($red, 5%),
+    border: lighten($red, 35%),
+    bg: lighten($red, 40%),
   ),
   error: (
-    border: $red,
+    color: darken($red, 5%),
+    border: lighten($red, 35%),
+    bg: lighten($red, 40%),
   ),
   warning: (
-    border: $yellow,
+    color: darken($yellow, 15%),
+    border: lighten($yellow, 35%),
+    bg: lighten($yellow, 40%),
   ),
   success: (
-    border: $green,
+    color: darken($green, 15%),
+    border: lighten($green, 35%),
+    bg: lighten($green, 40%),
   ),
   info: (
-    border: $cyan,
+    color: darken($cyan, 10%),
+    border: lighten($cyan, 40%),
+    bg: lighten($cyan, 45%),
   )
 );
 
@@ -134,5 +143,7 @@ $input-custom: (
   ),
 );
 
-$color-primary: #00a0d2;
-$color-secondary: #f7f7f7;
+$loading: (
+  color: $blue,
+  bg: $gray-400,
+)

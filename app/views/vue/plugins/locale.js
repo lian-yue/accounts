@@ -23,6 +23,8 @@ export default {
     }
     this.installed = true
 
+    Vue.mixin(mixin)
+
     Object.defineProperty(Vue.prototype, '$locale', ({
       configurable: true,
       enumerable: false,
@@ -32,9 +34,7 @@ export default {
     }: Object))
 
     Vue.prototype.$t = function (path: string | string[], defaultValue?: Object | string = {}, props?: Object = {}): string {
-      return this._locale.translation(path, defaultValue, props)
+      return this._locale.translate(path, defaultValue, props)
     }
-
-    Vue.mixin(mixin)
   }
 }

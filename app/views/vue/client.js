@@ -1,34 +1,39 @@
 /* @flow */
 import 'es6-promise/auto'
 import queryString from 'query-string'
-import { TOKEN, MESSAGES } from './store/types'
+import axios from 'axios'
+import { TOKEN } from './store/types'
 export async function init() {
-  if (!window.fetch) {
-    await import('whatwg-fetch')
-  }
   const createApp = require('./app').default
   const { store, router, locale, app } = createApp()
 
-  store.commit.fetch = async function (method: string, path: string, query: Object | string = {}, body?: any): Object {
-    let opt = {}
-    opt.headers = {}
-    opt.method = method
+  store.fetch = async function (method: string, path: string, query: Object | string = {}, data?: any): Object {
+    let opt: Object = {
+      url: path,
+      method,
+      headers: {
 
-    let uri: string = path
+      },
+      timeout: 10000,
+      validateStatus(status) {
+        return status >= 100 && status < 600
+      },
+    }
     try {
-      if (!body) {
+      if (!data) {
         // empty
-      } else if (typeof body === 'object') {
+      } else if (typeof data === 'object') {
         if (!store.state.token._id) {
           await store.dispatch({
             type: TOKEN,
             save: true,
           })
         }
-        opt.body = queryString.stringify(Object.assign({}, body, { format: 'json', csrf_token: store.state.token.id }))
-        opt.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        opt.data = queryString.stringify(Object.assign({}, data, { format: 'json', csrf_token: store.state.token.id }))
       } else {
-        opt.body = body
+        opt.data = data
+      }
+      if (data) {
         opt.headers['Content-Type'] = 'application/x-www-form-urlencoded'
       }
       let queryObject: Object
@@ -39,40 +44,38 @@ export async function init() {
       } else {
         queryObject = queryString.parse(query)
       }
-      uri += '?' + queryString.stringify(Object.assign({}, queryObject, body ? { format: 'json' } : {}))
+      let search: string = queryString.stringify(Object.assign({}, queryObject, method === 'HEAD' || method === 'GET' ? { format: 'json' } : {}))
+      if (search) {
+        search = '?' + search
+      }
+      opt.url += search
 
-      opt.credentials = opt.credentials || 'same-origin'
-      opt.timeout = 10000
+      let response = await axios(opt)
+      if (response.status === 204) {
+        response.data = {}
+      }
 
-      let response = await fetch(uri, opt).then(function (res) {
-        if (res.status === 204) {
-          return {}
-        }
-        return res.json()
-      })
-
-      if (response.messages) {
+      if (response.data.messages && response.data.properties) {
         let err = new Error
-        for (let key in response) {
+        for (let key in response.data) {
           // $flow-disable-line
-          err[key] = response[key]
+          err[key] = response.data[key]
         }
         throw err
       }
-      return response
+      return response.data
     } catch (e) {
-      e._type = e.type
-      e.type = MESSAGES
-      delete e.name
+      delete e.type
       throw e
     }
   }
 
-
-  //  读取 store
-  if (window.__INITIAL_STATE__) {
+  if (typeof window !== 'undefined' && window.__INITIAL_STATE__) {
     store.replaceState(window.__INITIAL_STATE__)
   }
+
+  // 链接
+  router.push(window.location.pathname + window.location.search + window.location.hash)
 
   // Locale
   await locale.changeLocale()

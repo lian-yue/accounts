@@ -13,8 +13,8 @@ import exists from './exists'
 import login from './login'
 import loginVerification from './loginVerification'
 
-import save from './save'
-import saveVerification from './saveVerification'
+import create from './create'
+import createVerification from './createVerification'
 
 
 import password from './password'
@@ -89,21 +89,21 @@ const rateLimitLoginVerificationMiddleware = rateLimitMiddleware({
 
 
 const rateLimitCreateMiddleware = rateLimitMiddleware({
-  name: 'uauth_save',
+  name: 'uauth_create',
   ip: true,
   limit: 120,
 }, {
-  name: 'uauth_save',
+  name: 'uauth_create',
   token: true,
   limit: 60,
 }, {
-  name: 'uauth_save',
+  name: 'uauth_create',
   ip: true,
   limit: 2,
   success: true,
   message: '当前 IP 注册过于频繁请{TIME}后重试'
 }, {
-  name: 'uauth_save',
+  name: 'uauth_create',
   token: true,
   limit: 1,
   success: true,
@@ -114,17 +114,17 @@ const rateLimitCreateMiddleware = rateLimitMiddleware({
 
 
 const rateLimitCreateVerificationMiddleware = rateLimitMiddleware({
-  name: 'uauth_save_verification',
+  name: 'uauth_create_verification',
   ip: true,
   limit: 12,
   success: true,
 }, {
-  name: 'uauth_save_verification',
+  name: 'uauth_create_verification',
   token: true,
   limit: 6,
   success: true,
 }, {
-  name: 'uauth_save_verification',
+  name: 'uauth_create_verification',
   body: {
     to(value) {
       return String(value).trim().toLocaleLowerCase()
@@ -196,14 +196,14 @@ router.post(['/', '/login'], rateLimitLoginMiddleware, login)
 router.post('/loginVerification', rateLimitLoginVerificationMiddleware, loginVerification)
 
 
-router.put('/save', rateLimitCreateMiddleware, save)
-router.post('/save', rateLimitCreateMiddleware, save)
-router.post('/saveVerification', rateLimitCreateVerificationMiddleware, saveVerification)
+router.put('/create', rateLimitCreateMiddleware, create)
+router.post('/create', rateLimitCreateMiddleware, create)
+router.post('/createVerification', rateLimitCreateVerificationMiddleware, createVerification)
 
 
 router.post('/password', rateLimitPasswordMiddleware, password)
 router.post('/passwordSelect', rateLimitPasswordSelectMiddleware, passwordSelect)
 router.post('/passwordVerification', rateLimitPasswordVerificationMiddleware, passwordVerification)
 
-router.opt(['/exists', '/login', '/loginVerification', '/save', '/saveVerification', '/password', '/passwordSelect', '/passwordVerification'], function (ctx: Context): void { })
+router.opt(['/exists', '/login', '/loginVerification', '/create', '/createVerification', '/reset', '/passwordSelect', '/passwordVerification'], function (ctx: Context): void { })
 export default router

@@ -22,7 +22,7 @@ export default class Weibo extends Api {
 
   authorizePath: string = '/oauth2/authorize'
 
-  name: string = config.name
+  id: string = 'weibo'
 
   constructor(clientId: string = config.clientId, clientSecret: string = config.clientSecret) {
     super(clientId, clientSecret)

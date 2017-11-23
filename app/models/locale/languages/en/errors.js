@@ -1,79 +1,82 @@
 export default {
   // path, value
-  default: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} is incorrect',
+  default: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} is incorrect',
 
   // path
-  required: 'The {translation("paths", path, path)} is required',
+  required: 'The {translate("paths", path, path)} is required',
 
   // path, value
-  enum: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} does not match',
+  enum: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} does not match',
 
   // path, value
-  match: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} does not match',
+  match: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} does not match',
 
   // path, value
-  incorrect: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} is incorrect',
+  incorrect: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} is incorrect',
 
 
   // path, value, MAX
-  min: 'The {translation("paths", path, path)} can not be less than {MIN}',
+  min: 'The {translate("paths", path, path)} can not be less than {MIN}',
   // path, value, MIN
-  max: 'The {translation("paths", path, path)} can not be greater than {MAX}',
+  max: 'The {translate("paths", path, path)} can not be greater than {MAX}',
 
 
   // path, value, minlength
-  minlength: 'The {translation("paths", path, path)} can not be less than {minlength} bytes',
+  minlength: 'The {translate("paths", path, path)} can not be less than {minlength} bytes',
   // path, value, maxlength
-  maxlength: 'The {translation("paths", path, path)} can not be greater than {maxlength} bytes',
+  maxlength: 'The {translate("paths", path, path)} can not be greater than {maxlength} bytes',
 
 
 
   // path, value, minimum
-  minimum: 'The minimum number of {translation("paths", path, path)} can not be less than {minimum}',
+  minimum: 'The minimum number of {translate("paths", path, path)} can not be less than {minimum}',
   // path, value, maximum
-  maximum: 'The maximum number of {translation("paths", path, path)} can not be greater than {maximum}',
+  maximum: 'The maximum number of {translate("paths", path, path)} can not be greater than {maximum}',
 
 
   // path value
-  hasexist: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} already exists',
+  hasexist: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} already exists',
   // path value
-  notexist: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} does not exist',
+  notexist: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} does not exist',
 
 
 
   // path, value
-  notsame: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} is not the same',
+  notsame: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} is not the same',
   // path, value
-  hassame: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} is the same',
-
-
-
-  // path, value
-  hasexpire: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} has expired',
-  // path, value
-  notexpire: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} not expired',
-
+  hassame: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} is the same',
 
 
 
   // path, value
-  notphone: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} can not be a mobile phone number',
+  hasexpire: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} has expired',
+  // path, value
+  notexpire: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} not expired',
+
+
+
 
   // path, value
-  notid: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} can not be id',
+  notphone: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} can not be a mobile phone number',
 
   // path, value
-  reserve: 'The {translation("paths", path, path)}{where(value, !=, "", ` {value}`)} is reserved by the system',
+  notid: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} can not be id',
+
+  // path, value
+  reserve: 'The {translate("paths", path, path)}{where(value, !=, "", ` {value}`)} is reserved by the system',
 
 
-  // 取消
-  cancel: 'The {translation("paths", path, path)} is canceled',
+  // path
+  cancel: 'The {translate("paths", path, path)} is canceled',
 
-  // 超时
-  timeout: 'The {translation("paths", path, path)} timeout',
+  // path
+  timeout: 'The {translate("paths", path, path)} timeout',
+
+  // path
+  retry: '{firstUpperCase(`translate("paths", path, path)`)} error, please try again',
 
   // reset, path, method
-  ratelimit: '{date(reset, "diff")} you can {translation("methods", path, path)} the {translation("paths", path, path)}',
+  ratelimit: '{date(reset, "diff")} you can {translate("paths", method, method)} the {translate("paths", path, path)}',
 
 
   notlogged: 'You are not logged in',
@@ -85,8 +88,8 @@ export default {
   permission: 'You do not have permission',
 
   // path, reason
-  black: 'The {translation("paths", path, path)} is blacklisted{reason, " because {reason}"}',
+  black: 'The {translate("paths", path, path)} is blacklisted{reason, " because {reason}"}',
 
   // path
-  white: 'The {translation("paths", path, path)} is not on the white list',
+  white: 'The {translate("paths", path, path)} is not on the white list',
 }

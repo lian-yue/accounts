@@ -75,7 +75,7 @@ export default async function (ctx: Context) {
       auth.set('value', userInfo.id)
       auth.set('token', state.accessToken)
       auth.set('state', state.userInfo)
-      auth.oncePost(token)
+      auth.oncePost(() => token.save())
     } else {
       ctx.throw(403, 'match', { path: 'column' })
     }
@@ -91,7 +91,7 @@ export default async function (ctx: Context) {
       display: auth.get('display'),
       token,
     })
-    auth.oncePost(message)
+    auth.oncePost(() => message.save())
   }
   await auth.save()
 }

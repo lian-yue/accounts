@@ -76,6 +76,20 @@ const schema: Schema<MessageModel> = new Schema({
   token: {
     type: Schema.Types.ObjectId,
     ref: 'Token',
+    set(token) {
+      if (!this.isNew || !token || typeof token.equals !== 'function' || typeof token.get !== 'function') {
+        return token
+      }
+      if (!this.get('application') && token.get('application')) {
+        this.set('application', token.get('application'))
+      }
+      if (!this.get('ip')) {
+        this.set('ip', token.get('ip'))
+      }
+      if (!this.get('userAgent')) {
+        this.set('userAgent', token.get('userAgent'))
+      }
+    }
   },
 
   ip: {
@@ -252,28 +266,9 @@ schema.methods.canDelete = async function canDelete(token?: TokenModel) {
  * 联系人方
  * @type {[type]}
  */
-schema.pre('validate', function () {
+schema.pre('validate', function (next) {
   if (!this.get('contact')) {
     this.set('contact', this.get('creator') || this.get('user'))
-  }
-})
-
-/**
- * toke 填补 application， ip 和 userAgent
- * @return {[type]} [description]
- */
-schema.pre('save', function (next) {
-  if (this.isNew && this.get('token')) {
-    let token = this.get('token')
-    if (!this.get('application') && token.get('application')) {
-      this.set('application', token.get('application'))
-    }
-    if (!this.get('ip')) {
-      this.set('ip', token.get('ip'))
-    }
-    if (!this.get('userAgent')) {
-      this.set('userAgent', token.get('userAgent'))
-    }
   }
   next()
 })
@@ -285,7 +280,7 @@ schema.pre('save', function (next) {
 schema.pre('save', function (next) {
   let user = this.get('user')
   let creator = this.get('creator')
-  if (!this.isNew || this.get('user').equals(creator)) {
+  if (!this.isNew || !creator || this.get('user').equals(creator)) {
     return next()
   }
 
@@ -295,7 +290,7 @@ schema.pre('save', function (next) {
     contact: user,
     readAt: this.get('createdAt') || new Date,
   })
-  this.savePost(message)
+  this.oncePost(() => message.save())
   next()
 })
 

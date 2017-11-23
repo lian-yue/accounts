@@ -8,7 +8,7 @@ mongoose.Promise = global.Promise
 
 
 MongooseError.ValidatorError.prototype.formatMessage = function (message: string, props: Object) {
-  return locale.translation(['errors', props.type || message], message, props)
+  return locale.translate(['errors', props.type || message], message, props)
 }
 
 MongooseError.messages.general.default = locale.getLanguageValue(['errors', 'default'])
@@ -54,9 +54,8 @@ Schema.Types.Integer = Integer
  */
 // $flow-disable-line
 Document.prototype.oncePost = function oncePost(fn: Function, ignoreError: boolean = false) {
-  fn.ignoreError = ignoreError
   this.$_oncePosts = this.$_oncePosts || []
-  this.$_oncePosts.push(fn)
+  this.$_oncePosts.push({ fn, ignoreError })
   return this
 }
 
@@ -210,7 +209,7 @@ export default function <Doc> (name: string, _schema: Object, options: Object = 
     for (let i = 0; i < posts.length; i++) {
       let post = posts[i]
       try {
-        await post.call(this)
+        await Promise.resolve(post.fn.call(this))
       } catch (e) {
         if (!post.ignoreError) {
           throw e

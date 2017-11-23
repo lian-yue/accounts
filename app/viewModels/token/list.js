@@ -1,9 +1,9 @@
 /* @flow */
 import { Types } from 'mongoose'
 import Token from 'models/token'
+import User from 'models/user'
 
 import type { Context } from 'koa'
-import type User from 'models/user'
 
 const ObjectId = Types.ObjectId
 

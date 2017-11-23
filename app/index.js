@@ -76,6 +76,7 @@ app.context.onerror = function onerror(e: mixed): void {
       // $flow-disable-line
       error.messages.push({
         fullpath,
+        message: value.message,
         path: value.path || fullpath,
         type: value.type || value.kind || undefined,
         name: value.name,
@@ -86,19 +87,22 @@ app.context.onerror = function onerror(e: mixed): void {
     delete error.properties.errors
     delete error.errors
   } else {
+    let value = models.createError(error)
     // $flow-disable-line
     error.messages = [
       {
-        path: error.path || undefined,
-        type: error.type || undefined,
-        name: error.name,
-        ...models.createError(error),
+        message: value.message,
+        path: value.path || undefined,
+        type: value.type || undefined,
+        name: value.name,
+        ...value,
       }
     ]
   }
 
   this.type = 'json'
   this.res.end(JSON.stringify({
+    message: error.message,
     error: error.message,
     status: error.status,
     name: error.name,
@@ -223,7 +227,7 @@ app.use(function (ctx) {
 // 错误捕获
 app.on('error', function (error: Error, ctx): void {
   let date: string = (new Date).toISOString()
-  if (!error.status || Number(error.status) >= 500) {
+  if (!error.status || app.env === 'development' || Number(error.status) >= 500) {
     console.error(date, 'server error :', error, ctx)
   } else {
     console.warn(`${ctx.method} ${ctx.status} ${ctx.url} - ${date} - ${ctx.request.ip} - ${error.message}`)

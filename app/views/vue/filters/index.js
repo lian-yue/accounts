@@ -1,5 +1,4 @@
 /* @flow */
-import site from 'config/site'
 import queryString from 'query-string'
 
 export function toUrl(path: string, query: string | Object = '', state?: Object): string {
@@ -15,7 +14,7 @@ export function toUrl(path: string, query: string | Object = '', state?: Object)
     search = query.substr(0, 1) === '?' ? query : '?' + query
   }
   if (state) {
-    return state.protocol + ':' + site.url + path + search
+    return state.site.protocol + ':' + state.site.url + path + search
   }
   return path + search
 }

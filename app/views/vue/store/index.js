@@ -2,20 +2,16 @@
 import Vue from 'vue'
 import Vuex from 'vuex'
 
-import actions from './actions'
-import getters from './getters'
-import mutations from './mutations'
-
 import * as modules from './modules'
 
 
 Vue.use(Vuex)
 
-export default function createStore(): Vuex.Store {
+export default function createStore(state: Object = {}): Vuex.Store {
   const plugins = []
   if (process.env.NODE_ENV === 'development') {
     plugins.push(function (store) {
-      store.subscribe(function (mutation, state) {
+      store.subscribe(function (mutation) {
         if (__SERVER__) {
           const debug = require('debug')('vue:vuex')
           debug('%s  %s', mutation.type, JSON.stringify(mutation.payload, null, '  '))
@@ -27,14 +23,8 @@ export default function createStore(): Vuex.Store {
   }
 
   return new Vuex.Store({
-    state: {
-      protocol: 'http',
-      messages: {},
-    },
-    actions,
-    getters,
+    state,
     modules,
-    mutations,
     plugins,
     strict: process.env.NODE_ENV === 'development',
   })

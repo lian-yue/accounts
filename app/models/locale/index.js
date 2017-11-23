@@ -127,7 +127,7 @@ export default class Locale {
     return value
   }
 
-  getLanguageValue(path: string | string[]): string {
+  getLanguageValue(path: string | string[], defaultValue: string = ''): string {
     let names: string[]
     if (typeof path === 'string') {
       names = path.split('.')
@@ -137,12 +137,12 @@ export default class Locale {
     let value = this.languagesPack[this.language]
     for (let i = 0; i < names.length; i++) {
       if (!value || typeof value !== 'object') {
-        return ''
+        return defaultValue
       }
       value = value[names[i]]
     }
     if (typeof value !== 'string') {
-      return ''
+      return defaultValue
     }
     return value
   }
@@ -400,7 +400,6 @@ export default class Locale {
       case 'diff': {
         let languagePack: Object = this.getLanguagePack(['date']) || {}
         let time = Math.round((Date.now() - date.getTime()) / 1000)
-
         let key: string
         if (time < 0) {
           key = 'after'
@@ -436,7 +435,7 @@ export default class Locale {
         if (value === 0) {
           value = 1
         }
-        return this.format(languagePack.date.diff[key], { value: this.format(text, { value }) })
+        return this.format(languagePack.diff[key], { value: this.format(text, { value }) })
       }
       case 'unix':
         return String(Math.ceil(date.getTime() / 1000))
@@ -609,12 +608,10 @@ export default class Locale {
 
 
   // 翻译
-  translation(path: string | string[], defaultValue?: Object | string = {}, props?: Object = {}): string {
-    let value = this.getLanguageValue(path)
-    if (!value && typeof defaultValue === 'string') {
-      value = defaultValue
-    }
-    return this.format(value, defaultValue && typeof defaultValue === 'object' ? defaultValue : props)
+  translate(path: string | string[], value1?: Object | string = {}, value2?: Object = {}): string {
+    let defaultValue: string = typeof value1 === 'object' ? '' : value1
+    let props: Object = typeof value1 === 'object' && value1 ? value1 : value2
+    return this.format(this.getLanguageValue(path, defaultValue), props)
   }
 
 
@@ -656,8 +653,13 @@ export default class Locale {
     return String(value).toLowerCase()
   }
 
-  filterTranslation(prefix: string = '', path: string, defaultValue: string | Object = {}, props: Object = {}): string {
-    return this.translation(prefix + '.' + path, defaultValue, props)
+  filterFirstUpperCase(value: any = ''): string {
+    let result = String(value)
+    return result.charAt(0).toUpperCase() + result.substr(1)
+  }
+
+  filterTranslate(prefix: string = '', path: string, defaultValue: string | Object = {}, props: Object = {}): string {
+    return this.translate(prefix + '.' + path, defaultValue, props)
   }
 
   filterLength(value: string = ''): string {

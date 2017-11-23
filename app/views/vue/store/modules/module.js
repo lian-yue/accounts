@@ -1,7 +1,7 @@
 /* @flow */
 import Vue from 'vue'
 import queryString from 'query-string'
-import { MESSAGES } from '../types'
+import { MESSAGE } from '../types'
 
 type OPTION = {
   state: Object,
@@ -12,9 +12,11 @@ type OPTION = {
   add?: boolean,
   key?: string,
   body?: any,
+  data?: any,
+  throw?: boolean,
   onState: (value: Object) => Object,
   onOption: (value: Object) => OPTION,
-  onMessages: (value: Object) => Object,
+  onMessage: (value: Object) => Object,
   [string]: any,
 }
 
@@ -28,7 +30,7 @@ function defaultOption(opts: Object): OPTION {
     onOption(value: Object): OPTION {
       return value
     },
-    onMessages(value: Object): Object {
+    onMessage(value: Object): Object {
       return value
     },
     key: '',
@@ -42,8 +44,8 @@ export default function (_opt: Object): Object {
   const module = {
     state: { ...opt.state },
     mutations: {
-      [opt.type](state: Object, option: { state: Object }) {
-        let newState = option.state
+      [opt.type](state: Object, option: { state?: Object, value?: Object }) {
+        let newState = option.state || option.value || {}
         if (option.add) {
           if (newState.results && Array.isArray(newState.results) && state.results && Array.isArray(state.results)) {
             newState.results = [].concat(state.results, newState.results)
@@ -71,15 +73,15 @@ export default function (_opt: Object): Object {
     actions: {
       async [opt.type]({ commit, state, rootState }: { commit: Function, state: Object, rootState: Object }, _payload: Object) {
         let option = defaultOption(_payload)
-        option = option.onState(opt.onOption(option))
-        let method: string = option.method || (option.body ? 'POST' : 'GET')
-        let fullPath: string = rootState.route.fullPath
+        option = option.onOption(opt.onOption(option))
+        let method: string = option.method || (option.body || option.data ? 'POST' : 'GET')
+        let routeFullPath: string = rootState.route.fullPath
         let path: string = option.path || rootState.route.path
-        let query: Object = option.query || rootState.route.path
-        let key: string = method === 'GET' ? path + queryString.stringify(query) : ''
-        let oldKey: string = state.key || ''
-        let uuid: string = __SERVER__ ? '' : Math.random().toString(36).substr(2)
-        let oldUuid = state.uuid || ''
+        let query: Object = option.query || rootState.route.query
+        let fullPath: string = path + queryString.stringify(query)
+        let oldFullPath: string = state.fullPath || ''
+        let key: string = __SERVER__ ? '' : Math.random().toString(36).substr(2)
+        let oldKey = state.key || ''
 
         let add = option.add
 
@@ -87,51 +89,55 @@ export default function (_opt: Object): Object {
           type: opt.type,
           add,
           state: {
-            uuid,
             key,
+            fullPath,
             loading: true,
           },
         })
 
         let newState: Object
         try {
-          newState = await commit.fetch(method, path, query, option.body)
+          newState = await this.fetch(method, path, query, option.body || option.data)
           newState = {
             ...option.state,
             ...newState
           }
           newState = option.onState(opt.onState(newState))
         } catch (e) {
-          if (state.uuid === uuid && state.loading && fullPath === rootState.route.fullPath) {
-            let message = option.onMessages(opt.onMessages({
-              ...e,
-              name: 'popup',
-              type: MESSAGES,
-              message: e.message,
-            }))
-            if (message) {
-              commit(message)
+          if (state.key === key && state.loading && routeFullPath === rootState.route.fullPath) {
+            if (!opt.throw && !option.throw) {
+              let message = option.onMessage(opt.onMessage({
+                name: 'popup',
+                type: MESSAGE,
+                state: e,
+              }))
+              if (message) {
+                commit(message)
+              }
             }
             commit({
               type: opt.type,
               add: true,
               state: {
+                fullPath: oldFullPath,
                 key: oldKey,
-                uuid: oldUuid,
                 loading: false,
               }
             })
           }
+          if (opt.throw || option.throw) {
+            throw e
+          }
           return
         }
-        if (newState && state.uuid === uuid && state.loading) {
+        if (newState && state.key === key && state.loading) {
           commit({
             type: opt.type,
             add,
             state: {
               ...newState,
+              fullPath,
               key,
-              uuid,
               loading: false,
             }
           })

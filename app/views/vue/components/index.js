@@ -1,7 +1,7 @@
-import Messages from './Messages'
+import Message from './Message'
 import Loading from './Loading'
 
 export {
   Loading,
-  Messages,
+  Message,
 }

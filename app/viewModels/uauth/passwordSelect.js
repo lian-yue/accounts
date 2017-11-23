@@ -19,7 +19,7 @@ export default async function (ctx: Context) {
   let user: ?User = await User.findByAuth(username)
 
   if (!user) {
-    ctx.throw(403, 'notexist', { path: 'user' })
+    ctx.throw(403, 'notexist', { path: 'username' })
     return
   }
 

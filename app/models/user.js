@@ -55,32 +55,6 @@ const schema: Schema<UserModel> = new Schema({
       },
       {
         isAsync: true,
-        async validator(value) {
-          if (this.get('admin')) {
-            return true
-          }
-          let auth: ?Auth = await Auth.findOne({
-            user: this,
-            column: 'username',
-            deletedAt: {
-              $exists: false,
-            }
-          }).read('primary').exec()
-          if (!auth || (auth.get('createdAt').getTime() + 86400 * 1000 * 30) < Date.now()) {
-            return true
-          }
-
-          this.invalidate('username', new MongooseError.ValidatorError({
-            path: 'username',
-            rate: '1 month',
-            type: 'ratelimit',
-            method: 'modify',
-            message: locale.getLanguageValue(['errors', 'ratelimit']),
-          }))
-        },
-      },
-      {
-        isAsync: true,
         type: 'hasexist',
         message: locale.getLanguageValue(['errors', 'hasexist']),
         async validator(value) {
@@ -407,11 +381,19 @@ schema.virtual('preAvatar').set(function (value) {
 
 
 schema.set('toJSON', {
-  transform(doc: UserModel, ret) {
+  virtuals: true,
+  transform(doc: UserModel, ret: Object) {
+    delete ret.oldPassword
+    delete ret.passwordAgain
+    delete ret.newPassword
+    delete ret.newPasswordAgain
+    delete ret.preAvatar
+
     let token = doc.getToken()
     let user = token ? token.get('user') : undefined
     let admin = user && !user.get('black') && user.get('admin')
     let me = user && user.equals(doc)
+
 
     if (!admin) {
       delete ret.registerIp
@@ -429,9 +411,7 @@ schema.set('toJSON', {
       ret.avatar = ''
       ret.description = '****'
     }
-
-    ret.url = doc.get('url')
-  }
+  },
 })
 
 
@@ -441,19 +421,16 @@ schema.set('toJSON', {
  * @param  string password
  * @return boolean
  */
-schema.methods.comparePassword = function comparePassword(password) {
-  return new Promise((resolve, reject) => {
-    let hash = this._password === undefined ? this.get('password') : this._password
-    if (!password || typeof password !== 'string' || !hash) {
-      return resolve(false)
-    }
-    bcrypt.compare(password, hash, (err, res) => {
-      if (err) {
-        return reject(err)
-      }
-      resolve(res)
-    })
-  })
+schema.methods.comparePassword = async function comparePassword(password) {
+  if (!password || typeof password !== 'string') {
+    return false
+  }
+  let hash = this._password === undefined ? this.get('password') : this._password
+  if (!hash || hash !== 'string') {
+    return false
+  }
+  let compare = await bcrypt.compare(password, hash)
+  return compare
 }
 
 schema.methods.canHasAdmin = async function canHasAdmin(token?: TokenModel) {
@@ -684,23 +661,14 @@ schema.preAsync('save', async function () {
  * @param  {Function} next [description]
  * @return {[type]}        [description]
  */
-schema.pre('save', function (next) {
+schema.preAsync('save', async function () {
   let password = this.get('password')
   if (!password || !this.isModified('password')) {
-    return next()
+    return
   }
-  bcrypt.genSalt(10, (err, salt) => {
-    if (err) {
-      return next(err)
-    }
-    bcrypt.hash(password, salt, (err, hash) => {
-      if (err) {
-        return next(err)
-      }
-      this.set('password', hash)
-      next()
-    })
-  })
+  let salt = await bcrypt.genSalt(10)
+  let hash = await bcrypt.hash(password, salt)
+  this.set('password', hash)
 })
 
 
@@ -719,7 +687,7 @@ schema.pre('save', function (next) {
 
 
 /**
- * 修改用户名
+ * 用户名
  * @return {[type]} [description]
  */
 schema.preAsync('save', async function () {
@@ -737,6 +705,7 @@ schema.preAsync('save', async function () {
 
 
   this.oncePost(async function () {
+
     // 不是自己的 需要删除
     if (auth && !this.equals(auth.get('user'))) {
       auth.set('deletedAt', new Date)
@@ -815,6 +784,8 @@ schema.pre('save', function (next) {
       await token.save()
     }
   })
+
+  return next()
 })
 
 

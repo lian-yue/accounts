@@ -24,7 +24,7 @@ export default class QQ extends Api {
 
   authorizePath: string = '/oauth2.0/authorize'
 
-  name: string = config.name
+  id: string = 'qq'
 
   constructor(clientId: string = config.clientId, clientSecret: string = config.clientSecret) {
     super(clientId, clientSecret)

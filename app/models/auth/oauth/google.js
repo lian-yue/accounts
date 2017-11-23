@@ -20,7 +20,7 @@ export default class Google extends Api {
 
   revokeTokenPath: string = 'https://accounts.google.com/o/oauth2/revoke'
 
-  name: string = config.name
+  id: string = 'google'
 
   scopeSeparator: string = ' '
 

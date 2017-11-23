@@ -35,4 +35,5 @@ export default async function (ctx: Context, next: () => Promise<void>) {
   } else {
     delete ctx.state.tokenState
   }
+  await next()
 }

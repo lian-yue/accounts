@@ -1,28 +1,25 @@
 <template>
-<label v-if="this.isCheck" :class="className">
-  <input v-bind="$props" :class="custom ? 'original' : 'inner'" :checked="checked" :value="check" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input" />
-  <span class="inner" v-if="custom"></span>
-  <slot></slot>
-</label>
-<div v-else-if="type == 'select' && custom" :class="className">
-  <input v-bind="$props" type="text" :value="selfValue" class="original" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input" />
-  <form-data-list :value="selfValue" :search="search">
+<div :class="className">
+  <label v-if="isCheck">
+    <input v-bind="$props" :class="custom ? 'original' : 'inner'" :checked="checked" :value="check" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input" />
+    <span class="inner" v-if="custom"></span>
     <slot></slot>
-  </form-data-list>
-</div>
-<div v-else-if="type == 'select'" :class="className">
-  <select v-bind="$props" :value="selfValue" class="inner" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input">
-    <option disabled></option>
+  </label>
+  <span v-else-if="type === 'select' && custom">
+    <input v-bind="$props" type="text" :value="selfValue" class="original" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input" />
+    <form-data-list :value="selfValue" :search="search">
+      <slot></slot>
+    </form-data-list>
+  </span>
+  <select v-else-if="type === 'select'" v-bind="$props" :value="selfValue" class="inner" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input">
+    <option disabled>{{placeholder || ''}}</option>
     <slot></slot>
   </select>
-</div>
-<div v-else-if="type == 'textarea'" :class="className">
-  <textarea v-bind="$props" class="inner" :value="selfValue" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input"></textarea>
-</div>
-<div v-else :class="className">
-  <input v-bind="$props" class="inner" :value="selfValue" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" ref="input" />
+  <textarea v-else-if="type === 'textarea'" v-bind="$props" class="inner" :value="selfValue" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur" @invalid="onInvalid" ref="input"></textarea>
+  <input v-else v-bind="$props" class="inner" :value="selfValue" @input="onValue" @change="onValue" @focus="onFocus" @blur="onBlur"  @invalid="onInvalid" ref="input" />
 </div>
 </template>
+
 <style lang="sass">
 @import "../../styles/variables"
 
@@ -61,10 +58,13 @@
 
 
 
-.input
+.form-input
   position: relative
   vertical-align: middle
   display: inline-block
+  input,
+  textarea,
+    width: 100%
   .inner
     background: transparent
     display: inline-block
@@ -116,10 +116,11 @@
 
 
 .input-check
-  display: inline-flex
-  padding-left: 1.25rem
-  margin-right: 1rem
-  margin-bottom: 0
+  label
+    display: inline-flex
+    padding-left: 1.25rem
+    margin-right: 1rem
+    margin-bottom: 0
   .inner
     border: 0
     padding: 0
@@ -187,7 +188,7 @@
     border-radius: .15rem
   .validation-message
     font-size: .75rem
-.input.input-select
+.form-input.input-select
   .inner
     height: 2.25rem
     height: calc(2.25rem + 2px)
@@ -205,6 +206,7 @@
       height: calc(1.3755rem + 2px)
 </style>
 <script>
+/* @flow */
 import FormDataList from './DataList'
 export default {
   components: {
@@ -223,9 +225,11 @@ export default {
     invalid: {
       type: Boolean,
     },
+
     validate: {
       type: [Boolean, Function]
     },
+
 
     options: {
       type: [Array, Function]
@@ -297,9 +301,8 @@ export default {
   data() {
     return {
       focus: false,
-      isValid: true,
+      isValid: null,
       selfValue: this.value,
-      validationMessage: '',
     }
   },
 
@@ -312,58 +315,47 @@ export default {
     selfValue(value) {
       this.$emit('input', value)
       this.$emit('change', value)
-
-      if (this.validate) {
-        if (this.validateTimeer) {
-          clearTimeout(this.validateTimeer)
-        }
-        this.validateTimeer = setTimeout(() => {
-          this.validateTimeer = null
-          this.checkValidity()
-        }, 300)
-      }
+      this.onValidate(true)
     },
   },
 
   computed: {
     isCheck() {
-      return this.type == 'radio' || this.type == 'checkbox'
+      return this.type === 'radio' || this.type === 'checkbox'
     },
     className() {
-      var validName
+      let validName
       if (this.valid) {
         validName = 'valid'
       } else if (this.invalid) {
         validName = 'invalid'
-      } else if (this.validate) {
+      } else if (this.validate && this.isValid !== null) {
         validName = this.isValid ? 'valid' : 'invalid'
       }
 
       return [
-        'input',
-        this.custom ? 'input-custom' :  void 0,
-        this.isCheck ? 'input-check' : void 0,
-        this.isCheck ? void 0 : 'input-' + this.size,
+        'form-input',
+        this.custom ? 'input-custom' : undefined,
+        this.isCheck ? 'input-check' : undefined,
+        this.isCheck ? undefined : 'input-' + this.size,
         'input-' + this.type,
-        this.block ? 'block' :  void 0,
-        this.focus ? 'focus' : void 0,
-        this.disabled ? 'disabled' : void 0,
-        this.checked ? 'checked' : void 0,
-        this.indeterminate && this.type == 'checkbox' ? 'indeterminate' : void 0,
+        this.block ? 'block' : undefined,
+        this.focus ? 'focus' : undefined,
+        this.disabled ? 'disabled' : undefined,
+        this.checked ? 'checked' : undefined,
+        this.indeterminate && this.type === 'checkbox' ? 'indeterminate' : undefined,
         validName,
       ]
     },
     checked() {
       switch (this.type) {
         case 'radio':
-          return this.check == this.selfValue
-          break;
+          return this.check === this.selfValue
         case 'checkbox':
-          if (this.check === void 0) {
+          if (this.check === undefined) {
             return Boolean(this.selfValue)
           }
-          return this.selfValue.indexOf(this.check) != -1
-          break;
+          return this.selfValue.indexOf(this.check) !== -1
         default:
           return false
       }
@@ -372,24 +364,25 @@ export default {
 
   methods: {
     onValue(e) {
-      var el = e.target
-      var oldValue = this.selfValue
-      var newValue = oldValue
-      if (this.type == 'checkbox') {
-        if (this.check === void 0) {
+      let el = e.target
+      let oldValue = this.selfValue
+      let newValue = oldValue
+      let index
+      if (this.type === 'checkbox') {
+        if (this.check === undefined) {
           newValue = el.checked
-        } else if (typeof oldValue != 'object' || !oldValue) {
-          newValue = el.checked ? this.check : void 0
+        } else if (typeof oldValue !== 'object' || !oldValue) {
+          newValue = el.checked ? this.check : undefined
         } else {
-          var index = oldValue.indexOf(this.check)
-        }
-        if (el.checked) {
-          if (index == -1) {
-            newValue = newValue.concat([this.check])
+          index = oldValue.indexOf(this.check)
+          if (el.checked) {
+            if (index === -1) {
+              newValue = newValue.concat([this.check])
+            }
+          } else if (index !== -1) {
+            newValue = newValue.concat([])
+            newValue.splice(index, 1)
           }
-        } else if (index != -1) {
-          newValue = newValue.concat([])
-          newValue.splice(index, 1)
         }
       } else {
         newValue = el.value
@@ -406,38 +399,87 @@ export default {
     onBlur(e) {
       this.focus = false
       this.$emit('blur', e)
-      this.checkValidity()
+      this.onValidate()
     },
-    checkValidity() {
-      var input = this.$refs.input
+
+    onValidate(change) {
+      if (!this.validate) {
+        return
+      }
+      if (this.validateTimeer) {
+        clearTimeout(this.validateTimeer)
+        this.validateTimeer = null
+      }
+
+      if (change) {
+        this.validateTimeer = setTimeout(() => {
+          this.validateTimeer = null
+          let input = this.$refs.input
+          if (input && input.validity && input.validity.customError) {
+            this.setValidity('')
+          }
+          this.checkValidity()
+        }, 250)
+      } else {
+        this.checkValidity()
+      }
+    },
+
+    onInvalid() {
+      let input = this.$refs.input
       if (!input) {
         return
       }
-      if (input.checkValidity && !input.checkValidity()) {
-        this.isValid = false
-        this.validationMessage = input.validationMessage
+      this.isValid = !input.validationMessage
+    },
+
+
+    setValidity(message = '') {
+      let input = this.$refs.input
+      if (!input) {
         return
       }
-      if (this.validate && typeof this.validate == 'function') {
+      this.isValid = !message
+      if (input.setCustomValidity) {
+        input.setCustomValidity(message)
+      }
+    },
+
+    checkValidity() {
+      let input = this.$refs.input
+      if (!input) {
+        return
+      }
+
+      // 验证失败
+      if (input.checkValidity && !input.checkValidity()) {
+        return
+      }
+
+      // 自定义验证失败
+      if (this.validate && typeof this.validate === 'function') {
         try {
           if (!this.validate(this.value, input)) {
-            throw new Message('Invalid')
+            throw new Error('Invalid')
           }
         } catch (e) {
-          this.isValid = false
-          this.validationMessage = e.message
+          this.setValidity(e.message || 'Invalid')
           return
         }
       }
-      this.isValid = true
-      this.validationMessage = ''
+
+      // 成功
+      this.setValidity()
     },
   },
+
   mounted() {
-    this.checkValidity()
+    if (this.selfValue !== '') {
+      this.checkValidity()
+    }
   },
   updated() {
-    if (this.type == 'checkbox' && this.$refs.input) {
+    if (this.type === 'checkbox' && this.$refs.input) {
       this.$refs.input.indeterminate = Boolean(this.indeterminate)
     }
   },

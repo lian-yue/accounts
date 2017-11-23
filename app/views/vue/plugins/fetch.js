@@ -23,6 +23,11 @@ export default {
       return
     }
     this.installed = true
+
+    if (!Vue.prototype.$fetch) {
+      Vue.mixin(mixin)
+    }
+
     Vue.prototype.$fetch = function () {
       if (__SERVER__) {
         return

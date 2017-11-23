@@ -11,7 +11,7 @@ export default async function (ctx: Context) {
 
   for (let column in ctx.query) {
     let value = ctx.query[column].toLowerCase().trim()
-    if (!column || column.charAt(0) === '_' || column.charAt(0) === '-' || column.indexOf('token') !== -1 || !value) {
+    if (!column || column.charAt(0) === '_' || column.charAt(0) === '-' || column === 'format' || column.indexOf('token') !== -1 || !value) {
       continue
     }
 

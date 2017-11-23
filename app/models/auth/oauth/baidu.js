@@ -24,7 +24,7 @@ export default class Baidu extends Api {
 
   authorizePath: string = '/oauth/2.0/authorize'
 
-  name: string = config.name
+  id: string = 'baidu'
 
   constructor(clientId: string = config.clientId, clientSecret: string = config.clientSecret) {
     super(clientId, clientSecret)

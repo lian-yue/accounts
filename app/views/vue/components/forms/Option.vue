@@ -12,6 +12,7 @@
 
 </style>
 <script>
+/* @flow */
 export default {
   props: {
     value: {
@@ -23,7 +24,7 @@ export default {
   },
   computed: {
     isShow() {
-      $parent.search
+      // this.$parent.search
     }
   },
   methods: {

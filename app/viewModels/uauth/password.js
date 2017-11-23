@@ -46,7 +46,7 @@ export default async function (ctx: Context) {
     test: Boolean(params.test),
   })
 
-  if (!verification && ctx.app.env !== 'development') {
+  if (!verification && (ctx.app.env !== 'development' || code.length < 6)) {
     ctx.throw(403, 'incorrect', { path: 'code' })
   }
 
@@ -56,8 +56,8 @@ export default async function (ctx: Context) {
     return
   }
 
-  let newPassword = String(params.new_password || '')
-  let newPasswordAgain = String(params.new_password_again || '')
+  let newPassword = String(params.newPassword || params.new_password || '')
+  let newPasswordAgain = String(params.newPasswordAgain || params.new_password_again || '')
 
   user.set('password', newPassword)
   user.set('newPassword', newPassword)
@@ -67,9 +67,15 @@ export default async function (ctx: Context) {
 
 
 
+
   let authorize
   if (application) {
     authorize = await Authorize.findOneCreate(user, application)
+  }
+
+  if (token.get('renewal') > (1000 * 3600)) {
+    token.set('renewal', 1000 * 3600)
+    token.set('expiredAt', Date.now() + 1000 * 3600)
   }
   token.set('user', user)
   token.set('authorize', authorize)

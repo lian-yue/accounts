@@ -64,7 +64,13 @@ export default function createError(error: mixed, message?: string, props?: Obje
     }
 
     // $flow-disable-line
-    result.properties = { ...result }
+    result.properties = {
+      message: result.message,
+      path: result.path || undefined,
+      type: result.type || undefined,
+      name: result.name,
+      ...result
+    }
 
     result.message = locale.format(result.message, result)
   }

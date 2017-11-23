@@ -2,7 +2,6 @@
 <main>
   <section id="content">
     <div id="not-found">
-      {{$t('views.error', 'Error')}}
     </div>
   </section>
 </main>
@@ -10,7 +9,7 @@
 <script>
 import site from 'config/site'
 
-import { MESSAGES } from '../../store/types'
+import { MESSAGE } from '../../store/types'
 
 export default {
   watch: {
@@ -25,9 +24,13 @@ export default {
         return
       }
       this.$store.commit({
-        type: MESSAGES,
+        type: MESSAGE,
         name: 'popup',
-        message: 'notexist'
+        state: {
+          message: 'notexist',
+          path: 'page',
+          translate: true,
+        }
       })
     }
   },
@@ -37,7 +40,7 @@ export default {
   },
 
   headers() {
-    let title = this.$t('views.error', 'Error')
+    let title = this.$t('error.title', 'Error')
     return {
       status: 404,
       title: [

@@ -1,11 +1,11 @@
 <template>
-<router-link :class="className" v-if="['router-link', 'link', 'router'].indexOf(name) != -1 && !disabled" :to="to || href">
+<router-link :class="className" v-on="$listeners" v-if="['router-link', 'link', 'router'].indexOf(name) != -1 && !disabled" :to="to || href">
   <slot></slot>
 </router-link>
-<a :class="className" v-else-if="['router-link', 'link', 'router', 'a'].indexOf(name) != -1" :href="to || href" @click="onClick">
+<a :class="className" v-on="$listeners" v-else-if="['router-link', 'link', 'router', 'a'].indexOf(name) != -1" :href="to || href" @click="onClick">
   <slot></slot>
 </a>
-<button :type="name" :class="className" :disabled="disabled" v-else>
+<button :type="name" :class="className" v-on="$listeners" :disabled="disabled" v-else>
   <slot></slot>
 </button>
 </template>
@@ -44,7 +44,7 @@
       &:active
         border-color: darken(map-get($value, bg), 5)
         background: map-get($value, bg)
-.button
+.form-button
   background: transparent
   cursor: pointer
   display: inline-block
@@ -102,6 +102,7 @@
 
 </style>
 <script>
+/* @flow */
 export default {
   props: {
     type: {
@@ -129,6 +130,9 @@ export default {
     disabled: {
       type: Boolean,
     },
+    submitting: {
+      type: Boolean,
+    },
     outline: {
       type: Boolean,
     }
@@ -144,12 +148,12 @@ export default {
     className() {
       return [
         'form-button',
-        'button',
         'button-' + this.type,
         'button-' + this.size,
-        this.block ? 'block' : void 0,
-        this.outline ? 'outline' : void 0,
-        this.disabled ? 'disabled' : void 0,
+        this.block ? 'block' : undefined,
+        this.outline ? 'outline' : undefined,
+        this.submitting ? 'submitting' : undefined,
+        this.disabled || this.submitting ? 'disabled' : undefined,
       ]
     }
   }

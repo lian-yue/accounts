@@ -32,7 +32,7 @@ declare class TokenModel extends Model {
   secret: string,
   type: string,
   scopes: string[],
-  renewal: boolean,
+  renewal: number,
   client: boolean,
 
   parent?: MongoId | TokenModel,

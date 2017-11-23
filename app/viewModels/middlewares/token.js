@@ -214,8 +214,8 @@ export default function ({
 
     // 过期时间
     let date = new Date
-    if (token.get('renewal') && (token.get('expiredAt').getTime() - 86400 * 1000 * 20) < date.getTime()) {
-      date.setTime(date.getTime() + 1000 * 86400 * 30)
+    if (token.get('renewal') && (token.get('expiredAt').getTime() - token.get('renewal') / 1.5) < date.getTime()) {
+      date.setTime(Date.now() + token.get('renewal'))
       token.set('expiredAt', date)
     }
 

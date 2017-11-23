@@ -39,11 +39,11 @@ export default async function (ctx: Context) {
       return
     }
 
-    let auth = await Auth.findOne({ user, column, value: userInfo.id, deletedAt: { $exists: false } }).exec()
+    let auth: ?Auth = await Auth.findOne({ user, column, value: userInfo.id, deletedAt: { $exists: false } }).exec()
     if (auth) {
       auth.set('token', state.accessToken)
       auth.set('state', state.userInfo)
-      token.oncePost(auth)
+      token.oncePost(() => { return auth ? auth.save() : false })
     }
 
 
@@ -51,8 +51,6 @@ export default async function (ctx: Context) {
   } else {
     let username = String(params.username || '').toLowerCase().trim()
     let password = String(params.password || '')
-
-
     if (!username) {
       ctx.throw(403, 'required', { path: 'username' })
     }
@@ -63,7 +61,7 @@ export default async function (ctx: Context) {
     user = await User.findByAuth(username)
 
     if (!user) {
-      ctx.throw(404, 'notexist', { path: 'user' })
+      ctx.throw(404, 'notexist', { path: 'username' })
       return
     }
     if (!await user.comparePassword(password)) {
@@ -75,6 +73,7 @@ export default async function (ctx: Context) {
         token,
       })
       await message.save()
+
       ctx.throw(403, 'incorrect', { path: 'password' })
     }
   }
@@ -88,6 +87,14 @@ export default async function (ctx: Context) {
     authorize = await Authorize.findOneCreate(user, application)
   }
 
+  let remember = params.rememberme || params.rememberMe || params.remember_me || params.remember || ''
+
+
+
+  if (!remember && token.get('renewal') > (1000 * 3600)) {
+    token.set('renewal', 1000 * 3600)
+    token.set('expiredAt', Date.now() + 1000 * 3600)
+  }
   token.set('user', user)
   token.set('authorize', authorize)
 

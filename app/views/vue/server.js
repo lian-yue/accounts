@@ -1,8 +1,9 @@
 /* @flow */
+import site from 'config/site'
 import createError from 'models/createError'
 
 import createApp from './app'
-import { PROTOCOL, TOKEN, MESSAGES } from './store/types'
+import { SITE, TOKEN } from './store/types'
 
 import type { Context } from 'koa'
 
@@ -12,17 +13,14 @@ export default async function (context: Object) {
   const ctx: Context = context.context
 
 
-  store.commit.fetch = async function (method: string, path: string, query: Object | string = {}, body?: any): Object {
+  store.fetch = async function (method: string, path: string, query: Object | string = {}, body?: any): Object {
     try {
       return await ctx.viewModel(method, path, query, body).then(state => toJSONObject(state))
     } catch (e) {
       let err = createError(e)
       ctx.app.emit('error', err, ctx)
       // $flow-disable-line
-      err._type = err.type
-      // $flow-disable-line
-      err.type = MESSAGES
-      delete err.name
+      delete err.type
       throw err
     }
   }
@@ -32,8 +30,12 @@ export default async function (context: Object) {
 
   // 协议
   store.commit({
-    type: PROTOCOL,
-    protocol: ctx.protocol
+    type: SITE,
+    value: {
+      protocol: ctx.protocol,
+      version: process.env.version,
+      ...site,
+    }
   })
 
   // token
@@ -65,7 +67,7 @@ export default async function (context: Object) {
 
   context.state = store.state
 
-  context.htmlAttrs = context.htmlAttrs || ''
+  context.htmlattrs = context.htmlattrs || ''
   context.title = context.title || ''
 
   return app

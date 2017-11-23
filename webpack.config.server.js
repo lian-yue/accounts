@@ -62,7 +62,7 @@ function config(opts = {}) {
         '.vue',
         '.js',
         '.json',
-        '.ejs',
+        '.html',
       ],
     },
 
@@ -114,10 +114,14 @@ function config(opts = {}) {
     module: {
       rules: [
         {
-          test: /\.ejs$/,
+          test: /\.html$/,
           use: [
             {
-              loader: 'ejs-loader',
+              loader: 'html-loader',
+              options: {
+                minimize: !isDev,
+                removeComments: false,
+              }
             },
           ],
         },

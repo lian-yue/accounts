@@ -10,7 +10,7 @@ export default async function (ctx: Context) {
   }
 
   let to = String(params.to || '').trim()
-  let toType = String(params.to_type || '').trim()
+  let toType = String(params.toType || params.to_type || '').trim()
 
   let token: Token = ctx.state.token
 

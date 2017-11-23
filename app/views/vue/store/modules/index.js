@@ -1,6 +1,13 @@
 /* @flow */
 import module from './module'
 import * as types from '../types'
+import message from './message'
+
+const site = module({
+  type: types.SITE,
+  clearType: types.SITE_CLEAR,
+  state: {},
+})
 
 
 const token = module({
@@ -14,7 +21,8 @@ const token = module({
     return option
   },
   state: {
-  }
+    cans: {}
+  },
 })
 
 const userList = module({
@@ -127,6 +135,8 @@ const messageRead = module({
 
 
 export {
+  site,
+  message,
   token,
   userList,
   userRead,
