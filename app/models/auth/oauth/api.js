@@ -41,6 +41,7 @@ export default class Api {
 
   data: Object
 
+  id: string
 
   constructor(clientId: string, clientSecret: string) {
     this.clientId = clientId
@@ -225,7 +226,7 @@ export default class Api {
   }
 
   keyCache(key: string): string {
-    return 'models.oauth.' + this.baseUri.replace(/^https?\/\//, '').replace(/^\.\w+$/, '') + this.key + crypto.createHash('md5').update(key).digest('base64')
+    return 'models.oauth.' + this.id + '.' + this.key + crypto.createHash('md5').update(key).digest('base64')
   }
 
   getCache(key: string): Promise<*> {
@@ -291,6 +292,7 @@ export default class Api {
     }
     let data = await this.getCache(key)
     if (data) {
+      this.data[key] = data
       await this.delCache(key)
     }
     return data
@@ -313,7 +315,7 @@ export default class Api {
       })
     }
 
-    let state = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(2)
+    let state = Math.random().toString(36).substr(2) + Math.random().toString(36).substr(6)
     await this.setCache(this.keyAuthorizeData({ state }), data, 3600)
 
     return this.getUri(this.authorizePath, {
@@ -415,7 +417,14 @@ export default class Api {
   }
 
   response(response: Object): Object {
-    let body: Object = response.data ? JSON.parse(response.data) : {}
+    let body: Object
+    if (!response.data) {
+      body = {}
+    } else if (typeof response.data === 'object') {
+      body = response.data
+    } else {
+      body = JSON.parse(response.data)
+    }
 
     let message
     if (body.error_description) {

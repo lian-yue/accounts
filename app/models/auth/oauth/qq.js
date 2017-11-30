@@ -103,15 +103,21 @@ export default class QQ extends Api {
 
 
   response(response: Object): Object {
-    let body = response.data.trim().replace(/[\r\n\t ;]$/g, '')
-    if (body.substr(0, 9) === 'callback(') {
-      body = body.substr(9, -1).trim()
-    }
-
-    if (body.substr(0, 1) === '\u007B' || body.substr(0, 1) === '\u005B') {
-      body = JSON.parse(body)
+    let body: Object
+    if (!response.data) {
+      body = {}
+    } else if (typeof response.data === 'object') {
+      body = response.data
     } else {
-      body = querystring.parse(body)
+      let data: string = response.data.trim().replace(/[\r\n\t ;]$/g, '')
+      if (data.substr(0, 9) === 'callback(') {
+        data = data.substr(9, -1).trim()
+      }
+      if (data.substr(0, 1) === '\u007B' || data.substr(0, 1) === '\u005B') {
+        body = JSON.parse(data)
+      } else {
+        body = querystring.parse(data)
+      }
     }
 
 

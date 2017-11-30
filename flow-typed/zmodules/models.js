@@ -83,7 +83,7 @@ declare class TokenModel extends Model {
 declare class UserModel extends Model {
   static refPopulate(path: string | Object): Object,
   static metaPopulate(all?: boolean): Object,
-  static findByAuth(val: any, columns?: string[]): Promise<this | void>,
+  static findByAuth(val: any, columns?: string | string[]): Promise<this | void>,
 
   username: string,
   nickname: string,

@@ -9,7 +9,7 @@
 
     <form-group v-if="!$route.query.to_type || $route.query.to_type === 'phone'">
       <label for="phone">{{$t('paths.phone', 'Phone')}}:</label>
-      <router-link class="form-to-type" :to="{path: $route.path, query: Object.assign({}, $route.query, {to_type: 'email'})}">Use email</router-link>
+      <router-link class="form-to-type" :to="{path: $route.path, query: Object.assign({}, $route.query, {to_type: 'email'})}">{{$t('uauth.create.use_email', 'Use email')}}</router-link>
       <form-input name="phone" id="phone" :validate="true" ref="phone" v-model="phone" type="text" required minlength="8" maxlength="16" :placeholder="$t('uauth.create.placeholder.phone', 'Mobile phone number')" :block="true"></form-input>
       <label for="phone-code">{{$t('paths.phoneCode', 'Validation code')}}:</label>
       <form-flex>
@@ -19,7 +19,7 @@
     </form-group>
     <form-group v-else-if="$route.query.to_type === 'email'">
       <label for="email">{{$t('paths.email', 'E-mail')}}:</label>
-      <router-link class="form-to-type" :to="{path: $route.path, query: Object.assign({}, $route.query, {to_type: 'phone'})}">Using mobile phone</router-link>
+      <router-link class="form-to-type" :to="{path: $route.path, query: Object.assign({}, $route.query, {to_type: 'phone'})}">{{$t('uauth.create.use_phone', 'Use phone')}}</router-link>
       <form-input name="email" id="email" :validate="true" ref="email" v-model="email" type="email" required minlength="3" maxlength="64" :placeholder="$t('uauth.create.placeholder.email', 'Please enter your e-mail')" :block="true"></form-input>
 
       <label for="email-code">{{$t('paths.emailCode', 'Validation code')}}:</label>
@@ -28,16 +28,20 @@
         <form-button name="send" class="form-send" type="light" :disabled="codeTimems > 0" :submitting="sendSubmitting" @click.prevent="onSend">{{codeTimems > 0 ? codeTimems : $t('uauth.create.send', 'Send')}}</form-button>
       </form-flex>
     </form-group>
-    <form-group>
+    <form-group v-if="!$route.query.empty_password">
       <label for="password">{{$t('paths.password', 'Password')}}:</label>
+      <router-link class="form-empty-password" :to="{path: $route.path, query: Object.assign({}, $route.query, {empty_password: 'true'})}">{{$t('uauth.create.empty_password', 'Do not password')}}</router-link>
       <form-input name="password" id="password" :validate="true" ref="password" v-model="password" type="password" required minlength="6" maxlength="64" :placeholder="$t('uauth.create.placeholder.password', 'Please enter password')" :block="true"></form-input>
     </form-group>
-    <form-group>
+    <form-group v-if="!$route.query.empty_password">
       <label for="passwordAgain">{{$t('paths.passwordAgain', 'Password again')}}:</label>
       <form-input name="passwordAgain" id="passwordAgain" :validate="true" ref="passwordAgain" v-model="passwordAgain" type="password" required minlength="6" maxlength="64" :placeholder="$t('uauth.create.placeholder.passwordAgain', 'Please enter your password again')" :block="true"></form-input>
     </form-group>
+    <form-group v-show="$route.query.empty_password">
+      <router-link class="form-set-password" :to="{path: $route.path, query: Object.assign({}, $route.query, { empty_password: undefined })}">{{$t('uauth.create.set_password', 'Set password')}}</router-link>
+    </form-group>
     <form-group>
-      <form-button name="submit" type="primary" size="large" :block="true" :submitting="submitting">{{$t('uauth.create.submit', 'Submit')}}</form-button>
+      <form-button name="submit" type="primary" size="large" :block="true" :disabled="$route.query.application && !applicationRead.id" :submitting="submitting">{{$t('uauth.create.submit', 'Submit')}}</form-button>
     </form-group>
   </form-index>
   <menu id="menu">
@@ -46,7 +50,7 @@
       <li><router-link :to="'/uauth/password' + search">{{$t('uauth.menus.password', 'Forgot password ?')}}</router-link></li>
     </ul>
   </menu>
-  <oauth-menu :disabled="submitting || ($route.query.application || !applicationRead.id)" method="create" :redirect_uri="redirect_uri"></oauth-menu>
+  <oauth-menu v-if="!$route.query.application || applicationRead.id" method="create" :redirect_uri="redirect_uri"></oauth-menu>
 </div>
 </template>
 <style lang="sass">
@@ -60,6 +64,7 @@
     margin-right: 1rem
   .form-send
     min-width: 120px
+  .form-empty-password,
   .form-to-type
     float: right
 </style>
@@ -139,6 +144,10 @@ export default {
       const store = this.$store
 
       let data = { ...this.$data }
+      if (this.$route.query.empty_password) {
+        delete data.password
+        delete data.passwordAgain
+      }
       try {
         this.submitting = true
         let token = await store.fetch('POST', '/uauth/create', {}, data)

@@ -49,7 +49,7 @@ export default async function (ctx: Context) {
     token,
     user,
     type,
-    toType: toType === 'phone' ? 'sms' : toType,
+    toType,
     to,
     nickname: user.get('nickname') || user.get('username'),
     ip: ctx.ip,

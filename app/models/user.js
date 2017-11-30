@@ -604,6 +604,8 @@ schema.statics.findByAuth = async function findByAuth(val, columns: string[] | s
   let column
   if (!Array.isArray(columns)) {
     column = columns
+  } else if (columns.length === 1) {
+    column = columns[0]
   } else if (/^[0-9a-z]{24}$/.test(value) && columns.indexOf('id') !== -1) {
     column = 'id'
   } else if ((value2 = matchEmail(value)) && columns.indexOf('email') !== -1) {

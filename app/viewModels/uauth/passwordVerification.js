@@ -48,7 +48,7 @@ export default async function (ctx: Context) {
     token,
     type: 'user_password',
     to: auth.get('value'),
-    toType: auth.get('column') === 'phone' ? 'sms' : auth.get('column'),
+    toType: auth.get('column'),
     nickname: user.get('nickname') || user.get('username'),
   })
 

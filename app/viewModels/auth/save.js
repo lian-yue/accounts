@@ -59,9 +59,9 @@ export default async function (ctx: Context) {
         code: params.code,
         user: auth.get('user'),
         to: auth.get('value'),
-        toType: column === 'phone' ? 'sms' : column,
+        toType: column,
       })
-      if (!verification && ctx.app.env !== 'development') {
+      if (!verification) {
         ctx.throw(403, 'incorrect', { path: 'code' })
       }
     } else if (oauthConfig[column]) {

@@ -3,6 +3,7 @@ import User from 'models/user'
 import Auth from 'models/auth'
 import Message from 'models/message'
 import Authorize from 'models/authorize'
+import Verification from 'models/verification'
 import oauthConfig from 'config/oauth'
 
 import type { Context } from 'koa'
@@ -18,13 +19,8 @@ export default async function (ctx: Context) {
   let application: ?Application = token.get('application')
   let user: ?User
 
-
   let column = String(params.column || '').toLowerCase().trim()
-  if (column) {
-    user = await User.findByAuth('www')
-    if (!oauthConfig[column]) {
-      ctx.throw(403, 'match', { path: 'column' })
-    }
+  if (oauthConfig[column]) {
     let state: Object = token.get('state.auth.' + column) || {}
     let userInfo: ?Object = state.userInfo
     if (!userInfo || !userInfo.id || (Date.now() - 300 * 10000) > state.createdAt.getTime()) {
@@ -32,7 +28,7 @@ export default async function (ctx: Context) {
       return
     }
 
-    user = await User.findByAuth(userInfo.id, [column])
+    user = await User.findByAuth(userInfo.id, column)
 
     if (!user) {
       ctx.throw(404, 'notexist', { path: 'user' })
@@ -46,35 +42,59 @@ export default async function (ctx: Context) {
       token.oncePost(() => { return auth ? auth.save() : false })
     }
 
-
     token.set('state.auth.' + column, undefined)
   } else {
     let username = String(params.username || '').toLowerCase().trim()
     let password = String(params.password || '')
+    let code = String(params.code)
+    let isCode = typeof params.code !== 'undefined'
     if (!username) {
       ctx.throw(403, 'required', { path: 'username' })
     }
-
-    if (!password) {
+    if (!isCode && !password) {
       ctx.throw(403, 'required', { path: 'password' })
     }
-    user = await User.findByAuth(username)
+
+    user = await User.findByAuth(username, column || ['email', 'phone'])
 
     if (!user) {
       ctx.throw(404, 'notexist', { path: 'username' })
       return
     }
-    if (!await user.comparePassword(password)) {
-      let message = new Message({
-        user,
-        type: 'user_login',
-        column,
-        error: true,
-        token,
-      })
-      await message.save()
 
-      ctx.throw(403, 'incorrect', { path: 'password' })
+    if (isCode) {
+      let verification  = await Verification.findByCode({
+        token,
+        type: 'user_login',
+        code,
+        to: username,
+      })
+      if (!verification) {
+        let message = new Message({
+          user,
+          type: 'user_login',
+          column,
+          error: true,
+          isCode,
+          token,
+        })
+        await message.save()
+        ctx.throw(401, 'incorrect', { path: 'code' })
+      }
+    } else {
+      if (!await user.comparePassword(password)) {
+        let message = new Message({
+          user,
+          type: 'user_login',
+          column,
+          error: true,
+          isCode,
+          token,
+        })
+        await message.save()
+
+        ctx.throw(403, 'incorrect', { path: 'password' })
+      }
     }
   }
 

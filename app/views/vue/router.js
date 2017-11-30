@@ -53,7 +53,7 @@ export default function createRouter(store: Object): Router {
             },
           },
           {
-            path: 'oauth',
+            path: 'oauth/:column',
             component: () => import('./views/uauth/OAuth'),
           },
         ],

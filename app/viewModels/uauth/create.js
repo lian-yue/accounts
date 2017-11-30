@@ -20,8 +20,8 @@ export default async function (ctx: Context) {
   let column = String(params.column || '').toLowerCase().trim()
   let username = String(params.username || '').trim()
   let nickname = String(params.nickname || '').trim() || username
-  let password = String(params.password || '')
-  let passwordAgain = String(params.passwordAgain || params.password_again || '')
+  let password = params.password
+  let passwordAgain = typeof params.passwordAgain !== undefined ? params.passwordAgain : params.password_again
   let gender = String(params.gender || '').trim()
   let birthday = params.birthday ? new Date(String(params.birthday || '').trim()) : undefined
   let description = String(params.description || '')
@@ -105,12 +105,6 @@ export default async function (ctx: Context) {
         user,
       }))
     }
-
-    // 取消密码设置
-    if (params.password === undefined) {
-      user.set('password', undefined)
-      user.set('passwordAgain', undefined)
-    }
   }
 
 
@@ -142,7 +136,7 @@ export default async function (ctx: Context) {
     }
   }
 
-  if (authEmail && (ctx.app.env !== 'development' || emailCode.length < 6)) {
+  if (authEmail) {
     let verification  = await Verification.findByCode({
       token,
       type: 'user_save',
@@ -155,13 +149,13 @@ export default async function (ctx: Context) {
     }
   }
 
-  if (authPhone && (ctx.app.env !== 'development' || phoneCode.length < 6)) {
+  if (authPhone) {
     let verification  = await Verification.findByCode({
       token,
       type: 'user_save',
       code: phoneCode,
       to: authPhone.get('value'),
-      toType: 'sms',
+      toType: 'phone',
     })
     if (!verification) {
       ctx.throw(401, 'incorrect', { path: 'phoneCode' })

@@ -55,9 +55,8 @@ const schema: Schema<VerificationModel> = new Schema({
             case 'email':
               value = matchEmail(to)
               break
-            case 'sms':
+            case 'phone':
               value = matchMobilePhone(to)
-              toType = 'phone'
               break
           }
           if (!value) {
@@ -73,7 +72,7 @@ const schema: Schema<VerificationModel> = new Schema({
   toType: {
     type: String,
     required: true,
-    enum: ['email', 'sms'],
+    enum: ['email', 'phone'],
   },
   code: {
     type: String,
@@ -139,7 +138,7 @@ schema.preAsync('save', async function () {
         })
       })
       break
-    case 'sms': {
+    case 'phone': {
       let data: {[string]: string} = {
         method: 'alibaba.aliqin.fc.sms.num.send',
         sign_method: 'md5',
@@ -150,7 +149,7 @@ schema.preAsync('save', async function () {
         extend: '',
         ...phoneConfig.sms,
         sms_type: 'normal',
-        sms_param: JSON.stringify({ used: type, nickname, code }),
+        sms_param: JSON.stringify({ type, nickname, code }),
         rec_num: to,
       }
 
@@ -180,7 +179,7 @@ schema.preAsync('save', async function () {
       let responseData: Object = response.data
       if (responseData.error_response) {
         let message = responseData.error_response.sub_code || responseData.error_response.sub_msg || responseData.error_response.msg
-        if (responseData.error_response.code === 15) {
+        if (message === 'isv.BUSINESS_LIMIT_CONTROL') {
           throw createError(403, 'ratelimit', {
             path: 'verification',
             reset: Date.now() + 60 * 1000,
@@ -272,7 +271,7 @@ schema.statics.findByCode = async function findByCode(options: {
     }
 
     // 验证值不对
-    if (verification.get('code') !== options.code) {
+    if (verification.get('code') !== options.code && (process.env.NODE_ENV !== 'development' || String(options.code).length !== 6)) {
       // 增加一次错误次
       await verification.update({ $inc: { error: 1 } })
       continue

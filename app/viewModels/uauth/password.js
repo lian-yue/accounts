@@ -46,7 +46,7 @@ export default async function (ctx: Context) {
     test: Boolean(params.test),
   })
 
-  if (!verification && (ctx.app.env !== 'development' || code.length < 6)) {
+  if (!verification) {
     ctx.throw(403, 'incorrect', { path: 'code' })
   }
 

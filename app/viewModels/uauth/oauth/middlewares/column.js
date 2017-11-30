@@ -16,8 +16,8 @@ export default async function (ctx: Context, next: () => Promise<void>) {
   }
 
   const oauth: Api = new OAuth
+  oauth.setKey(token.get('id'))
   oauth.setRedirectUri(ctx.request.protocol + '://' + ctx.request.host + ctx.request.path.replace(/\/[^\/]+\/?$/g, ''))
-  oauth.setKey(column + token.get('id'))
   ctx.state.oauth = oauth
   await next()
 }
