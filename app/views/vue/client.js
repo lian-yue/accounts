@@ -2,7 +2,9 @@
 import 'es6-promise/auto'
 import queryString from 'query-string'
 import axios from 'axios'
-import { TOKEN } from './store/types'
+import site from 'config/site'
+
+import { TOKEN, SITE } from './store/types'
 export async function init() {
   const createApp = require('./app').default
   const { store, router, locale, app } = createApp()
@@ -70,8 +72,22 @@ export async function init() {
     }
   }
 
-  if (typeof window !== 'undefined' && window.__INITIAL_STATE__) {
+  if (window.__INITIAL_STATE__) {
     store.replaceState(window.__INITIAL_STATE__)
+  } else {
+    // 网站信息
+    store.commit({
+      type: SITE,
+      value: {
+        protocol: window.location.protocol ? window.location.protocol.substr(0, window.location.protocol.length - 1) : 'http',
+        version: process.env.version,
+        ...site,
+      }
+    })
+
+    await store.dispatch({
+      type: TOKEN,
+    })
   }
 
   // 链接

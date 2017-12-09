@@ -62,9 +62,11 @@ input[type=radio]
   font-size: 1.5rem
   font-weight: 700
   line-height: 1
-  color: #000
-  text-shadow: 0 1px 0 rgba($black, .4)
+  color: map-get($close-button, color)
+  text-shadow: 0 1px 0 rgba(map-get($close-button, color), .4)
   opacity: .5
+  &:hover
+    opacity: .8
 .hide
   display: none
 
@@ -77,8 +79,8 @@ input[type=radio]
   .message
     transform: translate(-50%, -50%)
     text-align: center
-    background: rgba($black, .8)
-    color: #fff
+    background: map-get($message-popup, bg)
+    color: map-get($message-popup, color)
     border: 0
     border-radius: .2rem
     padding: 1px 1rem

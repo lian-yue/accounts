@@ -301,10 +301,8 @@ schema.methods.canUser = async function canUser(
     if (!user.equals(value)) {
       throw createError(403, 'incorrect', { path: 'user', value: typeof value.get === 'function' ? value.get('id') : String(value) })
     }
-  } else {
-    if (user) {
-      throw createError(403, 'haslogged')
-    }
+  } else if (!value && user) {
+    throw createError(403, 'haslogged')
   }
 
   if (admin) {

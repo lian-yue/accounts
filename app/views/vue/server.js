@@ -25,10 +25,7 @@ export default async function (context: Object) {
     }
   }
 
-  // 链接
-  router.push(ctx.url)
-
-  // 协议
+  // 网站信息
   store.commit({
     type: SITE,
     value: {
@@ -42,6 +39,9 @@ export default async function (context: Object) {
   await store.dispatch({
     type: TOKEN,
   })
+
+  // 链接
+  router.push(ctx.url)
 
   // Locale
   await locale.changeLocale()

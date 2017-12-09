@@ -58,6 +58,64 @@ export default function createRouter(store: Object): Router {
           },
         ],
       },
+      {
+        path: '/:user',
+        component: () => import('./views/user/Index'),
+        children: [
+          {
+            path: '',
+            component: () => import('./views/user/Read'),
+            meta: {
+              user: true,
+            },
+          },
+          {
+            path: 'save',
+            component: () => import('./views/user/Save'),
+            meta: {
+              user: true,
+            },
+          },
+          {
+            path: 'auth',
+            component: () => import('./views/auth/Index'),
+            children: [
+              {
+                path: '',
+                component: () => import('./views/auth/List'),
+                meta: {
+                  user: true,
+                },
+              },
+              {
+                path: ':auth',
+                component: () => import('./views/auth/Read'),
+                meta: {
+                  user: true,
+                },
+              },
+              {
+                path: ':auth/save',
+                component: () => import('./views/auth/Save'),
+                meta: {
+                  user: true,
+                },
+              },
+            ]
+          },
+        ]
+      },
+      {
+        path: '*',
+        component: () => import('./views/errors/NotFound'),
+      },
+      {
+        path: '/',
+        redirect: '/me',
+        meta: {
+          user: true,
+        },
+      },
       /*
       {
         path: '/:username',
@@ -146,13 +204,8 @@ export default function createRouter(store: Object): Router {
         ]
       },
       */
-      {
-        path: '*',
-        component: () => import('./views/errors/NotFound'),
-      },
     ]
   })
-
 
   // 登录判断
   router.beforeEach(function (to, from, next) {

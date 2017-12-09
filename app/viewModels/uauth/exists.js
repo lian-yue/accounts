@@ -10,7 +10,7 @@ export default async function (ctx: Context) {
   let result: {[string]: boolean} = {}
 
   for (let column in ctx.query) {
-    let value = ctx.query[column].toLowerCase().trim()
+    let value = String(ctx.query[column] || '').toLowerCase().trim()
     if (!column || column.charAt(0) === '_' || column.charAt(0) === '-' || column === 'format' || column.indexOf('token') !== -1 || !value) {
       continue
     }

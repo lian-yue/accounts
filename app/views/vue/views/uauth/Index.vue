@@ -65,7 +65,6 @@ export default {
       type: APPLICATION_READ,
       path: '/application/' + route.query.application,
       query: { cans: '' },
-      fullPath: route.fullPath.split('#')[0],
       onState(application: Object) {
         if (application.status !== 'pending' && application.status !== 'approved') {
           let e = new Error('black')

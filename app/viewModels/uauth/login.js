@@ -55,7 +55,7 @@ export default async function (ctx: Context) {
       ctx.throw(403, 'required', { path: 'password' })
     }
 
-    user = await User.findByAuth(username, column || ['email', 'phone'])
+    user = await User.findByAuth(username, column || ['id', 'username', 'email', 'phone'])
 
     if (!user) {
       ctx.throw(404, 'notexist', { path: 'username' })

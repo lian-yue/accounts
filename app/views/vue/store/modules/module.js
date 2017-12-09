@@ -78,8 +78,8 @@ export default function (_opt: Object): Object {
         let routeFullPath: string = rootState.route.fullPath
         let path: string = option.path || rootState.route.path
         let query: Object = option.query || rootState.route.query
-        let fullPath: string = path + queryString.stringify(query)
-        let oldFullPath: string = state.fullPath || ''
+        let fullPath: string = option.fullPath || rootState.route.fullPath || path + queryString.stringify(query)
+        let oldFullPath: any = state.fullPath
         let key: string = __SERVER__ ? '' : Math.random().toString(36).substr(2)
         let oldKey = state.key || ''
 

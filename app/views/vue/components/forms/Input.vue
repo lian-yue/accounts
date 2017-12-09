@@ -406,18 +406,20 @@ export default {
       if (!this.validate) {
         return
       }
+
       if (this.validateTimeer) {
         clearTimeout(this.validateTimeer)
         this.validateTimeer = null
       }
 
       if (change) {
+        // 删除错误
+        let input = this.$refs.input
+        if (input && input.validity && input.validity.customError) {
+          this.setValidity()
+        }
         this.validateTimeer = setTimeout(() => {
           this.validateTimeer = null
-          let input = this.$refs.input
-          if (input && input.validity && input.validity.customError) {
-            this.setValidity('')
-          }
           this.checkValidity()
         }, 250)
       } else {

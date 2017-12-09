@@ -4,7 +4,7 @@
     <message/>
     <form-group>
       <label for="username">{{$t('paths.username', 'Username')}}:</label>
-      <form-input name="username" id="username" :validate="true" ref="username" v-model="username" type="text" required maxlength="64" :placeholder="$t('uauth.login.placeholder.username', 'Please enter username / e-mail / phone')" :block="true"></form-input>
+      <form-input name="username" id="username" :validate="validateUsername" ref="username" v-model="username" type="text" required maxlength="64" :placeholder="$t('uauth.login.placeholder.username', 'Please enter username / e-mail / phone')" :block="true"></form-input>
     </form-group>
     <form-group v-if="$route.query.use_code">
       <label for="code">{{$t('paths.code', 'Validation code')}}:</label>
@@ -157,6 +157,11 @@ export default {
       const store = this.$store
 
       let data = { ...this.$data }
+      if (this.$route.query.use_code) {
+        delete data.password
+      } else {
+        delete data.code
+      }
       try {
         this.submitting = true
         let token = await store.fetch('POST', '/uauth/login', {}, data)
@@ -170,6 +175,16 @@ export default {
         store.commit({ type: MESSAGE, state: e })
       } finally {
         this.submitting = false
+      }
+    },
+
+    async validateUsername(username) {
+      try {
+        let exists = await this.$store.fetch('GET', '/uauth/exists', { username, id: username, email: username, phone: username })
+        if (!exists.username && !exists.id && !exists.email && !exists.phone) {
+          this.$refs.username.setValidity(this.$t('errors.notexist', 'The {path} does not exist', { path: 'username' }))
+        }
+      } catch (e) {
       }
     },
   },

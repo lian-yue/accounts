@@ -76,15 +76,12 @@ const schema: Schema<UserModel> = new Schema({
       }
       return password
     },
-    required: [
-      function () {
-        if (this.get('password') || typeof this.get('password') === 'string') {
-          return true
-        }
-        return false
-      },
-      locale.getLanguageValue(['errors', 'required']),
-    ],
+    required() {
+      if (this.get('password') || typeof this.get('password') === 'string') {
+        return true
+      }
+      return false
+    },
 
     validate: [
       {
@@ -421,16 +418,15 @@ schema.set('toJSON', {
  * @param  string password
  * @return boolean
  */
-schema.methods.comparePassword = async function comparePassword(password) {
+schema.methods.comparePassword = function comparePassword(password) {
   if (!password || typeof password !== 'string') {
     return false
   }
   let hash = this._password === undefined ? this.get('password') : this._password
-  if (!hash || hash !== 'string') {
+  if (!hash || typeof hash !== 'string') {
     return false
   }
-  let compare = await bcrypt.compare(password, hash)
-  return compare
+  return bcrypt.compare(password, hash)
 }
 
 schema.methods.canHasAdmin = async function canHasAdmin(token?: TokenModel) {

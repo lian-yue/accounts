@@ -34,10 +34,15 @@ $link: (
   hover-color: darken($blue, 15%),
 );
 
+$close-button: (
+  color: $black
+);
+
 $message-default: (
   bg: $white,
   color: $black,
 );
+
 $message: (
   danger: (
     color: darken($red, 5%),
@@ -64,6 +69,11 @@ $message: (
     border: lighten($cyan, 40%),
     bg: lighten($cyan, 45%),
   )
+);
+
+$message-popup: (
+  bg: rgba($black, .8),
+  color: $white,
 );
 
 
@@ -146,4 +156,17 @@ $input-custom: (
 $loading: (
   color: $blue,
   bg: $gray-400,
-)
+);
+
+$user-nav: (
+  bg: $gray-900,
+  color: $gray-100,
+  hover: (
+    color: $gray-900,
+    bg: $body-bg,
+  ),
+  active: (
+    color: $gray-900,
+    bg: $body-bg,
+  ),
+);

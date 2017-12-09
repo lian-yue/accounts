@@ -36,8 +36,11 @@ export default {
       if (!options || !options.fetch) {
         return
       }
-      if (options.fetchName && this.$route.fullPath.split('#')[0] === this.$store.state[options.fetchName].fullPath) {
-        return
+      if (options.fetchName) {
+        let fullPath = this.$store.state[options.fetchName].fullPath
+        if (fullPath && this.$route.fullPath.split('#')[0] === fullPath.split('#')[0]) {
+          return
+        }
       }
       options.fetch(this.$store)
     }

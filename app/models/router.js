@@ -38,7 +38,13 @@ export default class Router {
       for (let ii = 0; ii < route.middleware.length; ii++) {
         let middleware = route.middleware[ii]
         if (middleware instanceof this.constructor) {
-          middlewares.push(...middleware.methodMiddlewares(method, matches && matches[0].length ? path.substr(matches[0].length) : path))
+          let subpath: string
+          if (matches && matches[0].length) {
+            subpath = path.substr(matches[0].length) || '/'
+          } else {
+            subpath = path
+          }
+          middlewares.push(...middleware.methodMiddlewares(method, subpath))
           if (route.path) {
             isBreak = true
           }
